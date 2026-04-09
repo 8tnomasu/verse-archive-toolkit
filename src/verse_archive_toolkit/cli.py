@@ -4,6 +4,11 @@ import argparse
 import json
 from pathlib import Path
 
+from verse_archive_toolkit.app_paths import (
+    find_latest_log_path,
+    get_logs_directory,
+    resolve_output_directory,
+)
 from verse_archive_toolkit.builder import BuildHooks, build_selected_sources, collect_output_stats
 from verse_archive_toolkit.config import load_dotenv_file, load_zenquotes_api_key
 from verse_archive_toolkit.settings import AppSettings, build_runtime_config
@@ -22,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--source",
         choices=("all", "poems", "quotes"),
         default=None,
-        help="建庫來源：all=全部、poems=只抓英文詩、quotes=只抓哲思語錄",
+        help="建庫來源：all=並行抓取英文詩與哲思語錄、poems=只抓英文詩、quotes=只抓哲思語錄",
     )
     build_parser.add_argument("--output-dir", type=Path, default=None, help="輸出資料夾路徑")
     build_parser.add_argument("--poem-target", type=int, default=None, help="英文詩目標數量")
@@ -51,6 +56,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("gui", help="啟動主程式建庫 GUI。")
     subparsers.add_parser("translator", help="啟動翻譯輔助 GUI。")
     subparsers.add_parser("settings-path", help="輸出本機設定檔路徑。")
+    subparsers.add_parser("logs-path", help="輸出本機日誌資料夾路徑。")
+    paths_parser = subparsers.add_parser("paths", help="輸出目前設定檔、日誌與輸出資料夾位置。")
+    paths_parser.add_argument("--output-dir", type=Path, default=None, help="覆寫要顯示的輸出資料夾")
 
     return parser
 
@@ -91,6 +99,19 @@ def _apply_build_overrides(settings: AppSettings, args: argparse.Namespace) -> A
         updated.zenquotes_api_key = explicit_key
 
     return updated
+
+
+def _collect_path_payload(store: SettingsStore, settings: AppSettings, output_dir: Path | None = None) -> dict[str, str]:
+    resolved_output = resolve_output_directory(
+        output_dir if output_dir is not None else settings.build.output_dir
+    )
+    latest_log = find_latest_log_path("builder-gui")
+    return {
+        "settings_path": str(store.path.resolve()),
+        "logs_dir": str(get_logs_directory().resolve()),
+        "output_dir": str(resolved_output),
+        "latest_builder_log": str(latest_log.resolve()) if latest_log is not None else "",
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -141,6 +162,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "settings-path":
         print(store.path)
+        return 0
+
+    if args.command == "logs-path":
+        print(get_logs_directory())
+        return 0
+
+    if args.command == "paths":
+        print(json.dumps(_collect_path_payload(store, settings, args.output_dir), indent=2, ensure_ascii=False))
         return 0
 
     if args.command == "gui":

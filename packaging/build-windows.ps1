@@ -72,3 +72,4 @@ if ($Target -in @("All", "Translator")) {
 }
 
 Write-Host "打包完成，輸出目錄：$distRoot" -ForegroundColor Green
+Write-Host "User config and logs will be stored under the Verse Archive Toolkit folder in the current user's profile." -ForegroundColor DarkGray

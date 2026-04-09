@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 
-APP_AUTHOR = "8tnomasu"
 APP_NAME = "Verse Archive Toolkit"
 SETTINGS_FILENAME = "settings.json"
 SETTINGS_SCHEMA_VERSION = 2

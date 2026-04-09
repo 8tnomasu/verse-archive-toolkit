@@ -9,15 +9,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from platformdirs import user_log_dir
-
-from verse_archive_toolkit.settings import APP_AUTHOR, APP_NAME
+from verse_archive_toolkit.app_paths import get_logs_directory
 
 
 def get_user_log_directory() -> Path:
-    path = Path(user_log_dir(APP_NAME, APP_AUTHOR))
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return get_logs_directory()
 
 
 def create_log_path(app_slug: str) -> Path:

@@ -13,12 +13,14 @@
 
 - 使用 `PySide6` 提供 Windows 桌面 GUI
 - PoetryDB / ZenQuotes 抓取流程採背景執行，不阻塞 GUI
+- 當建庫來源選擇 `all` 時，英文詩與哲思語錄會真正併行抓取
 - 過濾規則可在 GUI 直接編輯、保存、還原預設值
 - 過濾規則支援 `accept` / `review` / `reject`
-- 本機設定使用 `platformdirs` 存放在使用者目錄，不寫入 Git
+- 本機設定與日誌使用 `platformdirs` 存放在使用者目錄，並以 `Verse Archive Toolkit` 作為資料夾主體，不寫入 Git
 - 啟動時若發生例外，會寫入本機 log，避免 EXE 靜默失敗
 - 翻譯工具支援全文搜尋、上一筆 / 下一筆、未保存變更提示、隨機抽取未翻譯資料
-- CLI 仍可使用 `build`、`stats`、`gui`、`translator`、`settings-path`
+- 主程式 GUI 內建「路徑與診斷」區，可直接查看 / 開啟 / 複製設定檔、日誌與輸出位置
+- CLI 仍可使用 `build`、`stats`、`gui`、`translator`、`settings-path`、`logs-path`、`paths`
 
 ## 安裝
 
@@ -67,6 +69,8 @@ CLI 建庫：
 verse-archive build --source all --poem-target 500 --quote-target 500
 ```
 
+當 `--source all` 時，CLI 也會同時並行抓取英文詩與哲思語錄。
+
 查看輸出統計：
 
 ```bash
@@ -77,6 +81,18 @@ verse-archive stats
 
 ```bash
 verse-archive settings-path
+```
+
+查詢本機日誌資料夾位置：
+
+```bash
+verse-archive logs-path
+```
+
+一次查看設定檔 / 日誌 / 輸出位置：
+
+```bash
+verse-archive paths
 ```
 
 ## 主程式 GUI 說明
@@ -91,7 +107,9 @@ verse-archive settings-path
 - 設定請求間隔、逾時、最大重試次數
 - 設定每幾筆自動儲存
 - 顯示進度條、目前狀態、已通過 / 待審 / 已拒絕 / 已略過 / 本次已處理
+- 可分別查看英文詩與哲思語錄的進度、狀態與統計
 - 顯示建庫日誌與完成摘要
+- 內建「路徑與診斷」區，可直接開啟設定檔位置、日誌資料夾、輸出資料夾，或複製診斷資訊
 - 可直接開啟翻譯輔助 GUI
 
 ### API 金鑰保存與遮罩
@@ -150,12 +168,28 @@ GUI 中數值型規則都支援 `0 = 不設限`，包含：
 
 ## 設定檔、日誌與輸出位置
 
+程式會依作業系統與目前使用者環境，自動把本機設定與日誌放到對應的使用者目錄中；路徑主體固定使用 `Verse Archive Toolkit`，不再帶入開發者個人名稱。
+
+主程式 GUI 的「路徑與診斷」區可直接：
+
+- 查看目前設定檔位置
+- 查看目前日誌資料夾位置
+- 查看目前輸出資料夾位置
+- 開啟上述位置
+- 複製路徑或完整診斷資訊
+
+CLI 也可使用：
+
+- `verse-archive settings-path`
+- `verse-archive logs-path`
+- `verse-archive paths`
+
 ### 設定檔
 
 Windows 預設位於：
 
 ```text
-%APPDATA%\8tnomasu\Verse Archive Toolkit\settings.json
+%APPDATA%\Verse Archive Toolkit\settings.json
 ```
 
 本機設定檔包含：
@@ -172,7 +206,7 @@ Windows 預設位於：
 Windows 預設位於：
 
 ```text
-%LOCALAPPDATA%\8tnomasu\Verse Archive Toolkit\Logs\
+%LOCALAPPDATA%\Verse Archive Toolkit\Logs\
 ```
 
 主程式與翻譯工具都會各自建立啟動 log，例如：
@@ -199,7 +233,21 @@ output\
 - `philosophy_quotes.json`
 - `philosophy_quotes_review.json`
 
-建議在 GUI 中指定固定資料夾，避免 EXE 由不同工作目錄啟動時把資料散落到不同位置。
+主程式 GUI 會以目前設定中的「輸出資料夾」為準，並在「路徑與診斷」區顯示實際解析後路徑。
+
+若使用 CLI 而未指定 `--output-dir`，則會沿用本機設定中的輸出資料夾；若該設定仍為預設值 `output`，代表實際輸出位置會是目前工作目錄下的 `output/`。
+
+若是只有 EXE 的使用者，建議在主程式 GUI 中明確指定固定輸出資料夾，避免從不同工作目錄啟動時把資料散落到不同位置。
+
+## 併行建庫與進度顯示
+
+- 當建庫來源選擇 `英文詩 + 哲思語錄` 或 CLI 指定 `--source all` 時，PoetryDB 與 ZenQuotes 會真正同時執行
+- 兩個來源共用同一組取消訊號；按下「停止 / 取消」後，兩邊都會收到停止要求
+- 主程式 GUI 會分開顯示：
+  - 英文詩進度
+  - 哲思語錄進度
+  - 各自的已通過 / 待審 / 已拒絕 / 已略過 / 已處理
+- 同時保留全域摘要與整體日誌
 
 ## Windows 打包
 
@@ -293,9 +341,12 @@ python -m unittest discover -s tests
 目前測試與驗證重點包含：
 
 - CLI 基本功能
+- 路徑工具與本機資料夾命名
+- `source=all` 併行建庫聚合邏輯
 - 設定檔保存 / 載入 / 損毀容錯
 - 翻譯 repository 搜尋與保存
 - GUI smoke test
+- 主程式 GUI 的來源進度區塊與路徑診斷狀態
 - GUI 過濾規則 action 下拉選單回填
 - PyInstaller 指令與 Windows Debug / Release 打包流程
 

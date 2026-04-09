@@ -20,6 +20,7 @@ except Exception:  # pragma: no cover - handled by skip
 
 from verse_archive_toolkit.settings_store import SettingsStore
 from verse_archive_toolkit.settings import AppSettings
+from verse_archive_toolkit.builder import BuildProgress
 
 
 @unittest.skipIf(QApplication is None, "PySide6 is not available")
@@ -66,6 +67,43 @@ class GuiSmokeTests(unittest.TestCase):
                 window.filter_editor.poetry_editor.keyword_blacklist.get_rule().action,
                 "accept",
             )
+            window.close()
+
+    def test_builder_window_shows_source_progress_and_path_diagnostics(self) -> None:
+        from verse_archive_toolkit.gui.builder_app import BuilderMainWindow
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "output"
+            store = SettingsStore(Path(tmp_dir) / "settings")
+            settings = store.load()
+            settings.build.output_dir = str(output_dir)
+            store.save(settings)
+
+            window = BuilderMainWindow(store)
+            self.assertEqual(window.output_path_display.text(), str(output_dir.resolve()))
+            self.assertIn("poems", window._source_widgets)
+            self.assertIn("quotes", window._source_widgets)
+
+            poems_index = window.source_combo.findData("poems")
+            window.source_combo.setCurrentIndex(poems_index)
+            self.assertEqual(window._source_widgets["quotes"].status_label.text(), "本次未啟用")
+
+            window._handle_progress(
+                BuildProgress(
+                    source="poems",
+                    status_text="英文詩進度：已通過 3 / 10",
+                    accepted_count=3,
+                    review_count=1,
+                    rejected_count=0,
+                    skipped_count=2,
+                    processed_count=6,
+                    target_count=10,
+                    reason_counts={},
+                )
+            )
+            self.assertEqual(window._source_widgets["poems"].accepted_label.text(), "3")
+            self.assertEqual(window._source_widgets["poems"].processed_label.text(), "6")
+            self.assertTrue(window.summary_label.text())
             window.close()
 
 

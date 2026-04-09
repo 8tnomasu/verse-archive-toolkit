@@ -5,23 +5,13 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from platformdirs import user_config_dir
-
-from verse_archive_toolkit.settings import (
-    APP_AUTHOR,
-    APP_NAME,
-    SETTINGS_FILENAME,
-    AppSettings,
-)
+from verse_archive_toolkit.app_paths import get_settings_directory
+from verse_archive_toolkit.settings import AppSettings, SETTINGS_FILENAME
 
 
 class SettingsStore:
     def __init__(self, base_dir: Path | None = None) -> None:
-        self._base_dir = (
-            base_dir
-            if base_dir is not None
-            else Path(user_config_dir(APP_NAME, APP_AUTHOR, roaming=True))
-        )
+        self._base_dir = base_dir if base_dir is not None else get_settings_directory()
         self._path = self._base_dir / SETTINGS_FILENAME
 
     @property

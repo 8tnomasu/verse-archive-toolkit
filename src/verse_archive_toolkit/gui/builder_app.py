@@ -29,6 +29,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from verse_archive_toolkit.app_paths import (
+    build_diagnostic_report,
+    find_latest_log_path,
+    get_logs_directory,
+    open_path_location,
+    resolve_output_directory,
+)
 from verse_archive_toolkit.builder import BuildHooks, BuildProgress, BuildResult, build_selected_sources
 from verse_archive_toolkit.settings import (
     AppSettings,
@@ -377,6 +384,17 @@ class _SummaryTotals:
     target: int = 0
 
 
+@dataclass(slots=True)
+class _SourceWidgets:
+    progress_bar: QProgressBar
+    status_label: QLabel
+    accepted_label: QLabel
+    review_label: QLabel
+    rejected_label: QLabel
+    skipped_label: QLabel
+    processed_label: QLabel
+
+
 class BuilderMainWindow(QMainWindow):
     def __init__(self, settings_store: SettingsStore | None = None) -> None:
         super().__init__()
@@ -385,6 +403,7 @@ class BuilderMainWindow(QMainWindow):
         self._thread: QThread | None = None
         self._worker: BuildWorker | None = None
         self._source_progress: dict[str, BuildProgress] = {}
+        self._source_widgets: dict[str, _SourceWidgets] = {}
         self._translator_window: QWidget | None = None
 
         self.setWindowTitle("Verse Archive Toolkit 建庫工具")
@@ -392,7 +411,9 @@ class BuilderMainWindow(QMainWindow):
         self._build_ui()
         self._apply_settings(self.settings)
         self._refresh_api_key_hint()
-        self._append_log(f"設定檔位置：{self.settings_store.path}")
+        self._refresh_path_views()
+        self._append_log(f"設定檔位置：{self.settings_store.path.resolve()}")
+        self._append_log(f"日誌資料夾：{get_logs_directory().resolve()}")
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -408,7 +429,7 @@ class BuilderMainWindow(QMainWindow):
         main_layout.addWidget(tabs)
 
         footer = QLabel(
-            "本機設定檔與啟動日誌會存放在使用者目錄，不會寫回 Git 倉庫；API key 只在本機保存，介面中只顯示遮罩後內容。"
+            "本機設定檔與啟動日誌會存放在使用者目錄，不會寫回 Git 倉庫；路徑與診斷區可直接查看 / 開啟設定檔、日誌與輸出資料夾，API key 只在本機保存，介面中只顯示遮罩後內容。"
         )
         footer.setWordWrap(True)
         footer.setStyleSheet("color: #555;")
@@ -483,6 +504,7 @@ class BuilderMainWindow(QMainWindow):
         form.addRow("ZenQuotes API 金鑰", api_key_box)
 
         self.output_dir_edit = QLineEdit()
+        self.output_dir_edit.textChanged.connect(self._refresh_path_views)
         browse_button = QPushButton("瀏覽...")
         browse_button.clicked.connect(self._browse_output_dir)
         path_row = QWidget()
@@ -496,6 +518,7 @@ class BuilderMainWindow(QMainWindow):
         self.source_combo.addItem("英文詩 + 哲思語錄", "all")
         self.source_combo.addItem("只抓英文詩", "poems")
         self.source_combo.addItem("只抓哲思語錄", "quotes")
+        self.source_combo.currentIndexChanged.connect(self._sync_source_panels_for_selection)
         form.addRow("建庫來源", self.source_combo)
 
         self.poem_target_spin = QSpinBox()
@@ -542,6 +565,8 @@ class BuilderMainWindow(QMainWindow):
         button_row.addWidget(self.open_translator_button)
         layout.addLayout(button_row)
 
+        layout.addWidget(self._create_paths_group())
+
         progress_group = QGroupBox("執行狀態")
         progress_layout = QVBoxLayout(progress_group)
         self.progress_bar = QProgressBar()
@@ -569,12 +594,18 @@ class BuilderMainWindow(QMainWindow):
         stats_grid.addWidget(QLabel("本次已處理"), 2, 0)
         stats_grid.addWidget(self.processed_label, 2, 1)
 
+        source_grid = QGridLayout()
+        source_grid.addWidget(self._create_source_progress_group("poems", "英文詩"), 0, 0)
+        source_grid.addWidget(self._create_source_progress_group("quotes", "哲思語錄"), 0, 1)
+
         self.log_output = QPlainTextEdit()
         self.log_output.setReadOnly(True)
         self.log_output.setMinimumHeight(260)
 
         progress_layout.addWidget(self.progress_bar)
         progress_layout.addWidget(self.status_label)
+        progress_layout.addLayout(source_grid)
+        progress_layout.addWidget(QLabel("全域摘要"))
         progress_layout.addLayout(stats_grid)
         progress_layout.addWidget(self.summary_label)
         progress_layout.addWidget(QLabel("日誌輸出"))
@@ -611,6 +642,115 @@ class BuilderMainWindow(QMainWindow):
 
         return widget
 
+    def _create_path_display(self) -> QLineEdit:
+        field = QLineEdit()
+        field.setReadOnly(True)
+        return field
+
+    def _create_paths_group(self) -> QGroupBox:
+        group = QGroupBox("路徑與診斷")
+        layout = QGridLayout(group)
+
+        self.settings_path_display = self._create_path_display()
+        self.logs_dir_display = self._create_path_display()
+        self.latest_log_display = self._create_path_display()
+        self.output_path_display = self._create_path_display()
+
+        settings_open_button = QPushButton("開啟設定檔位置")
+        settings_open_button.clicked.connect(self._open_settings_location)
+        settings_copy_button = QPushButton("複製設定檔路徑")
+        settings_copy_button.clicked.connect(
+            lambda: self._copy_to_clipboard(self.settings_path_display.text(), "設定檔路徑")
+        )
+
+        logs_open_button = QPushButton("開啟日誌資料夾")
+        logs_open_button.clicked.connect(self._open_logs_directory)
+        logs_copy_button = QPushButton("複製日誌路徑")
+        logs_copy_button.clicked.connect(
+            lambda: self._copy_to_clipboard(self.logs_dir_display.text(), "日誌資料夾路徑")
+        )
+
+        latest_log_open_button = QPushButton("開啟最近日誌位置")
+        latest_log_open_button.clicked.connect(self._open_latest_log_location)
+        latest_log_copy_button = QPushButton("複製最近日誌路徑")
+        latest_log_copy_button.clicked.connect(
+            lambda: self._copy_to_clipboard(self.latest_log_display.text(), "最近啟動日誌路徑")
+        )
+
+        output_open_button = QPushButton("開啟輸出資料夾")
+        output_open_button.clicked.connect(self._open_output_directory)
+        output_copy_button = QPushButton("複製輸出路徑")
+        output_copy_button.clicked.connect(
+            lambda: self._copy_to_clipboard(self.output_path_display.text(), "輸出資料夾路徑")
+        )
+
+        layout.addWidget(QLabel("設定檔位置"), 0, 0)
+        layout.addWidget(self.settings_path_display, 0, 1)
+        layout.addWidget(settings_open_button, 0, 2)
+        layout.addWidget(settings_copy_button, 0, 3)
+
+        layout.addWidget(QLabel("日誌資料夾"), 1, 0)
+        layout.addWidget(self.logs_dir_display, 1, 1)
+        layout.addWidget(logs_open_button, 1, 2)
+        layout.addWidget(logs_copy_button, 1, 3)
+
+        layout.addWidget(QLabel("最近啟動日誌"), 2, 0)
+        layout.addWidget(self.latest_log_display, 2, 1)
+        layout.addWidget(latest_log_open_button, 2, 2)
+        layout.addWidget(latest_log_copy_button, 2, 3)
+
+        layout.addWidget(QLabel("目前輸出資料夾"), 3, 0)
+        layout.addWidget(self.output_path_display, 3, 1)
+        layout.addWidget(output_open_button, 3, 2)
+        layout.addWidget(output_copy_button, 3, 3)
+
+        diagnostics_button = QPushButton("複製診斷資訊")
+        diagnostics_button.clicked.connect(self._copy_diagnostic_report)
+        layout.addWidget(diagnostics_button, 4, 3)
+        return group
+
+    def _create_source_progress_group(self, source: str, title: str) -> QGroupBox:
+        group = QGroupBox(f"{title}進度")
+        layout = QVBoxLayout(group)
+
+        progress_bar = QProgressBar()
+        progress_bar.setRange(0, 100)
+        status_label = QLabel("待命中")
+        status_label.setWordWrap(True)
+
+        stats_grid = QGridLayout()
+        accepted_label = QLabel("0")
+        review_label = QLabel("0")
+        rejected_label = QLabel("0")
+        skipped_label = QLabel("0")
+        processed_label = QLabel("0")
+
+        stats_grid.addWidget(QLabel("已通過"), 0, 0)
+        stats_grid.addWidget(accepted_label, 0, 1)
+        stats_grid.addWidget(QLabel("待審"), 0, 2)
+        stats_grid.addWidget(review_label, 0, 3)
+        stats_grid.addWidget(QLabel("已拒絕"), 1, 0)
+        stats_grid.addWidget(rejected_label, 1, 1)
+        stats_grid.addWidget(QLabel("已略過"), 1, 2)
+        stats_grid.addWidget(skipped_label, 1, 3)
+        stats_grid.addWidget(QLabel("本次已處理"), 2, 0)
+        stats_grid.addWidget(processed_label, 2, 1)
+
+        layout.addWidget(progress_bar)
+        layout.addWidget(status_label)
+        layout.addLayout(stats_grid)
+
+        self._source_widgets[source] = _SourceWidgets(
+            progress_bar=progress_bar,
+            status_label=status_label,
+            accepted_label=accepted_label,
+            review_label=review_label,
+            rejected_label=rejected_label,
+            skipped_label=skipped_label,
+            processed_label=processed_label,
+        )
+        return group
+
     def _apply_settings(self, settings: AppSettings) -> None:
         self.api_key_edit.setText(settings.zenquotes_api_key)
         self.output_dir_edit.setText(settings.build.output_dir)
@@ -623,6 +763,119 @@ class BuilderMainWindow(QMainWindow):
         self.request_timeout_spin.setValue(settings.build.request_timeout)
         self.max_retries_spin.setValue(settings.build.max_retries)
         self.filter_editor.set_settings(settings.filters)
+        self._refresh_path_views()
+        self._sync_source_panels_for_selection()
+
+    def _current_output_directory(self) -> Path:
+        return resolve_output_directory(self.output_dir_edit.text().strip())
+
+    def _target_for_source(self, source: str) -> int:
+        if source == "poems":
+            return self.poem_target_spin.value()
+        if source == "quotes":
+            return self.quote_target_spin.value()
+        return 0
+
+    def _refresh_path_views(self, *_: object) -> None:
+        if not hasattr(self, "settings_path_display"):
+            return
+        self.settings_path_display.setText(str(self.settings_store.path.resolve()))
+        self.logs_dir_display.setText(str(get_logs_directory().resolve()))
+        latest_log = find_latest_log_path("builder-gui")
+        self.latest_log_display.setText(str(latest_log.resolve()) if latest_log is not None else "尚未找到")
+        self.output_path_display.setText(str(self._current_output_directory()))
+
+    def _copy_to_clipboard(self, text: str, label: str) -> None:
+        if not text or text == "尚未找到":
+            self.status_label.setText(f"{label}目前無法複製。")
+            return
+        QApplication.clipboard().setText(text)
+        self.status_label.setText(f"{label}已複製到剪貼簿。")
+        self._append_log(f"{label}已複製到剪貼簿：{text}")
+
+    def _copy_diagnostic_report(self) -> None:
+        report = build_diagnostic_report(
+            output_dir=self._current_output_directory(),
+            settings_path=self.settings_store.path,
+            app_slug="builder-gui",
+        )
+        QApplication.clipboard().setText(report)
+        self.status_label.setText("診斷資訊已複製到剪貼簿。")
+        self._append_log("診斷資訊已複製到剪貼簿。")
+
+    def _open_directory(self, path: Path, *, ensure_exists: bool = False) -> None:
+        try:
+            opened = open_path_location(path, ensure_exists=ensure_exists)
+        except FileNotFoundError:
+            QMessageBox.warning(self, "找不到路徑", f"找不到指定路徑：\n{path}")
+            return
+        except Exception as error:
+            QMessageBox.critical(self, "無法開啟路徑", str(error))
+            return
+
+        self.status_label.setText(f"已開啟：{opened}")
+        self._append_log(f"已開啟路徑：{opened}")
+
+    def _open_settings_location(self) -> None:
+        self.settings_store.base_dir.mkdir(parents=True, exist_ok=True)
+        self._open_directory(self.settings_store.path, ensure_exists=True)
+
+    def _open_logs_directory(self) -> None:
+        self._open_directory(get_logs_directory(), ensure_exists=True)
+
+    def _open_latest_log_location(self) -> None:
+        latest_log = find_latest_log_path("builder-gui")
+        if latest_log is None:
+            QMessageBox.information(self, "尚未找到日誌", "目前尚未找到主程式建庫工具的啟動日誌。")
+            return
+        self._open_directory(latest_log)
+
+    def _open_output_directory(self) -> None:
+        self._open_directory(self._current_output_directory(), ensure_exists=True)
+
+    def _set_source_panel_state(self, source: str, *, status: str, active: bool) -> None:
+        widgets = self._source_widgets.get(source)
+        if widgets is None:
+            return
+        widgets.progress_bar.setValue(0)
+        widgets.status_label.setText(status)
+        widgets.accepted_label.setText("0")
+        widgets.review_label.setText("0")
+        widgets.rejected_label.setText("0")
+        widgets.skipped_label.setText("0")
+        widgets.processed_label.setText("0")
+        widgets.progress_bar.setEnabled(active)
+
+    def _sync_source_panels_for_selection(self, *_: object) -> None:
+        selected = str(self.source_combo.currentData() or "all")
+        enabled_sources = {"poems", "quotes"} if selected == "all" else {selected}
+        for source in SOURCE_LABELS:
+            if source in self._source_progress:
+                self._update_source_panel(self._source_progress[source])
+                continue
+            if source in enabled_sources:
+                self._set_source_panel_state(source, status="待命中", active=True)
+            else:
+                self._set_source_panel_state(source, status="本次未啟用", active=False)
+
+    def _update_source_panel(self, payload: BuildProgress) -> None:
+        widgets = self._source_widgets.get(payload.source)
+        if widgets is None:
+            return
+
+        widgets.accepted_label.setText(str(payload.accepted_count))
+        widgets.review_label.setText(str(payload.review_count))
+        widgets.rejected_label.setText(str(payload.rejected_count))
+        widgets.skipped_label.setText(str(payload.skipped_count))
+        widgets.processed_label.setText(str(payload.processed_count))
+        widgets.status_label.setText(payload.status_text)
+        widgets.progress_bar.setEnabled(True)
+
+        if payload.target_count <= 0:
+            progress_value = 100 if payload.done else 0
+        else:
+            progress_value = min(100, int((payload.accepted_count / payload.target_count) * 100))
+        widgets.progress_bar.setValue(progress_value)
 
     def _collect_settings(self) -> AppSettings:
         settings = self.settings.clone()
@@ -656,6 +909,7 @@ class BuilderMainWindow(QMainWindow):
         )
         if selected:
             self.output_dir_edit.setText(selected)
+            self._refresh_path_views()
 
     def _append_log(self, message: str) -> None:
         self.log_output.appendPlainText(message)
@@ -663,6 +917,7 @@ class BuilderMainWindow(QMainWindow):
     def _save_settings(self) -> None:
         self.settings = self._collect_settings()
         saved_path = self.settings_store.save(self.settings)
+        self._refresh_path_views()
         self._append_log(f"設定已儲存至 {saved_path}")
         self.status_label.setText("設定已儲存。")
 
@@ -682,11 +937,14 @@ class BuilderMainWindow(QMainWindow):
     def _start_build(self) -> None:
         self._save_settings()
         self._source_progress.clear()
+        self._sync_source_panels_for_selection()
         self.progress_bar.setValue(0)
         self.status_label.setText("準備開始建庫...")
         self.summary_label.setText("建庫執行中。")
         self.log_output.clear()
         self._append_log("已送出建庫工作。")
+        self._append_log(f"輸出資料夾：{self._current_output_directory()}")
+        self._append_log("建庫來源已啟動；若選擇全部來源，英文詩與哲思語錄會並行抓取。")
 
         self._toggle_running_state(True)
         self._thread = QThread(self)
@@ -713,6 +971,7 @@ class BuilderMainWindow(QMainWindow):
         if not isinstance(payload, BuildProgress):
             return
         self._source_progress[payload.source] = payload
+        self._update_source_panel(payload)
         totals = self._summarize_progress()
 
         self.accepted_label.setText(str(totals.accepted))
@@ -725,7 +984,7 @@ class BuilderMainWindow(QMainWindow):
         if totals.target > 0:
             progress_value = min(100, int((totals.accepted / totals.target) * 100))
         self.progress_bar.setValue(progress_value)
-        self.status_label.setText(payload.status_text)
+        self.status_label.setText(f"{_humanize_source(payload.source)}：{payload.status_text}")
 
     def _summarize_progress(self) -> _SummaryTotals:
         totals = _SummaryTotals()
@@ -742,14 +1001,36 @@ class BuilderMainWindow(QMainWindow):
         if not isinstance(results, dict):
             return
 
+        cancelled = False
         summary_lines: list[str] = []
         for source_name, result in results.items():
             if not isinstance(result, BuildResult):
                 continue
+            cancelled = cancelled or result.cancelled
+            final_status = (
+                f"{_humanize_source(source_name)}建庫已取消。"
+                if result.cancelled
+                else f"{_humanize_source(source_name)}建庫已完成。"
+            )
+            final_progress = BuildProgress(
+                source=source_name,
+                status_text=final_status,
+                accepted_count=result.accepted_count,
+                review_count=result.review_count,
+                rejected_count=result.rejected_count,
+                skipped_count=result.skipped_count,
+                processed_count=result.processed_count,
+                target_count=self._target_for_source(source_name),
+                reason_counts=result.reason_counts,
+                done=not result.cancelled,
+                cancelled=result.cancelled,
+            )
+            self._source_progress[source_name] = final_progress
+            self._update_source_panel(final_progress)
             summary_lines.append(
-                f"{_humanize_source(source_name)}：已通過 {result.accepted_count} 筆，"
-                f"待審 {result.review_count} 筆，已拒絕 {result.rejected_count} 筆，"
-                f"已略過 {result.skipped_count} 筆"
+                f"{_humanize_source(source_name)}：已處理 {result.processed_count} 筆，"
+                f"已通過 {result.accepted_count} 筆，待審 {result.review_count} 筆，"
+                f"已拒絕 {result.rejected_count} 筆，已略過 {result.skipped_count} 筆"
             )
             if result.reason_counts:
                 top_reasons = ", ".join(
@@ -762,10 +1043,18 @@ class BuilderMainWindow(QMainWindow):
                 )
                 summary_lines.append(f"主要命中原因：{top_reasons}")
 
+        totals = self._summarize_progress()
+        self.accepted_label.setText(str(totals.accepted))
+        self.review_label.setText(str(totals.review))
+        self.rejected_label.setText(str(totals.rejected))
+        self.skipped_label.setText(str(totals.skipped))
+        self.processed_label.setText(str(totals.processed))
+        if totals.target > 0 and not cancelled:
+            self.progress_bar.setValue(100)
+
         self.summary_label.setText("\n".join(summary_lines) if summary_lines else "建庫已完成。")
-        self.status_label.setText("建庫已完成。")
-        self.progress_bar.setValue(100)
-        self._append_log("建庫已成功完成。")
+        self.status_label.setText("建庫已取消。" if cancelled else "建庫已完成。")
+        self._append_log("建庫已結束。" if cancelled else "建庫已成功完成。")
         self._toggle_running_state(False)
 
     def _handle_failed(self, message: str) -> None:

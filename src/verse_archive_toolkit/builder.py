@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from collections import Counter
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -476,18 +477,53 @@ def build_selected_sources(
     hooks: BuildHooks | None = None,
 ) -> dict[str, BuildResult]:
     hooks = hooks or BuildHooks()
-    results: dict[str, BuildResult] = {}
+    if source == "poems":
+        return {"poems": build_poem_archive(config=config, hooks=hooks)}
 
-    if source in {"poems", "all"}:
-        results["poems"] = build_poem_archive(config=config, hooks=hooks)
+    if source == "quotes":
+        return {"quotes": build_quote_archive(config=config, hooks=hooks)}
 
-    if source in {"quotes", "all"}:
-        results["quotes"] = build_quote_archive(config=config, hooks=hooks)
-
-    if not results:
+    if source != "all":
         raise ValueError(f"不支援的建庫來源：{source}")
 
-    return results
+    results: dict[str, BuildResult] = {}
+    future_map: dict[Future[BuildResult], str] = {}
+    parallel_cancelled = False
+
+    def should_cancel_parallel() -> bool:
+        if parallel_cancelled:
+            return True
+        if hooks.should_cancel is None:
+            return False
+        return hooks.should_cancel()
+
+    parallel_hooks = BuildHooks(
+        log=hooks.log,
+        progress=hooks.progress,
+        should_cancel=should_cancel_parallel,
+    )
+    _log(hooks, "[系統] 已同時啟動英文詩與哲思語錄建庫工作。")
+
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="verse-archive-build") as executor:
+        future_map[executor.submit(build_poem_archive, config, parallel_hooks)] = "poems"
+        future_map[executor.submit(build_quote_archive, config, parallel_hooks)] = "quotes"
+
+        first_error: Exception | None = None
+        for future in as_completed(future_map):
+            source_name = future_map[future]
+            source_label = "英文詩" if source_name == "poems" else "哲思語錄"
+            try:
+                results[source_name] = future.result()
+            except Exception as error:
+                parallel_cancelled = True
+                if first_error is None:
+                    first_error = error
+                _log(hooks, f"[系統] {source_label}建庫工作失敗，已要求其他來源停止。")
+
+        if first_error is not None:
+            raise first_error
+
+    return {name: results[name] for name in ("poems", "quotes") if name in results}
 
 
 def collect_output_stats(config: ToolkitConfig) -> dict[str, int]:
