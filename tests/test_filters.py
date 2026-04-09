@@ -9,8 +9,9 @@ SRC_DIR = Path(__file__).resolve().parents[1] / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from verse_archive_toolkit.filters import get_poem_review_reason, get_quote_review_reason
+from verse_archive_toolkit.filters import evaluate_poem_filters, evaluate_quote_filters
 from verse_archive_toolkit.records import build_poem_record
+from verse_archive_toolkit.settings import FilterSettings
 
 
 class FilterTests(unittest.TestCase):
@@ -26,9 +27,11 @@ class FilterTests(unittest.TestCase):
             ],
         )
 
-        self.assertIsNone(get_poem_review_reason(poem))
+        decision = evaluate_poem_filters(poem, FilterSettings().poetry)
+        self.assertFalse(decision.matched)
+        self.assertEqual(decision.action, "accept")
 
-    def test_poem_filter_rejects_repetition(self) -> None:
+    def test_poem_filter_rejects_repetition_with_reason(self) -> None:
         poem = build_poem_record(
             title="Echo",
             author="Jane Doe",
@@ -40,18 +43,37 @@ class FilterTests(unittest.TestCase):
             ],
         )
 
-        self.assertEqual(get_poem_review_reason(poem), "too_repetitive")
+        decision = evaluate_poem_filters(poem, FilterSettings().poetry)
+        self.assertTrue(decision.matched)
+        self.assertEqual(decision.reason, "poetry.unique_line_ratio.below_min")
 
     def test_quote_filter_rejects_generic_motivation(self) -> None:
         quote = "Believe in yourself and stay positive because you can do anything."
-        self.assertEqual(
-            get_quote_review_reason(quote),
-            "matched_phrase:believe in yourself",
-        )
+        decision = evaluate_quote_filters(quote, FilterSettings().quotes)
+        self.assertTrue(decision.matched)
+        self.assertEqual(decision.reason, "quotes.phrase_blacklist.match")
 
     def test_quote_filter_accepts_philosophical_text(self) -> None:
         quote = "Truth arrives quietly when the mind stops bargaining with fear."
-        self.assertIsNone(get_quote_review_reason(quote))
+        decision = evaluate_quote_filters(quote, FilterSettings().quotes)
+        self.assertFalse(decision.matched)
+        self.assertEqual(decision.action, "accept")
+
+    def test_zero_range_values_disable_length_limits(self) -> None:
+        poem = build_poem_record(
+            title="Short",
+            author="Jane Doe",
+            lines=["A long enough line.", "Another long enough line.", "Third one is here.", "Fourth arrives too."],
+        )
+        settings = FilterSettings()
+        settings.poetry.text_length.min_value = 0
+        settings.poetry.text_length.max_value = 0
+        settings.poetry.line_count.min_value = 0
+        settings.poetry.line_count.max_value = 0
+        settings.poetry.average_line_length.value = 0
+        settings.poetry.unique_line_ratio.value = 0
+        decision = evaluate_poem_filters(poem, settings.poetry)
+        self.assertFalse(decision.matched)
 
 
 if __name__ == "__main__":

@@ -1,143 +1,175 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from verse_archive_toolkit.records import get_lines, get_nested
+from verse_archive_toolkit.settings import FilterSettings, PoetryFilterSettings, QuoteFilterSettings
 
 
-POEM_MIN_LINES = 4
-POEM_MAX_LINES = 24
-POEM_MIN_TEXT_LEN = 60
-POEM_MAX_TEXT_LEN = 1200
+@dataclass(slots=True)
+class FilterDecision:
+    matched: bool = False
+    action: str = "accept"
+    reason: str | None = None
+    detail: str | None = None
 
-QUOTE_MIN_TEXT_LEN = 35
-QUOTE_MAX_TEXT_LEN = 280
 
-SOUP_PHRASES = [
-    "believe in yourself",
-    "never give up",
-    "follow your heart",
-    "dream big",
-    "live your best life",
-    "best version of yourself",
-    "happiness is a choice",
-    "you can do anything",
-    "stay positive",
-    "good vibes",
-    "shine your light",
-    "reach for the stars",
-    "manifest your dreams",
-    "trust the process",
-]
+def _accept() -> FilterDecision:
+    return FilterDecision()
 
-SOUP_WORDS = {
-    "success",
-    "motivation",
-    "motivational",
-    "inspiration",
-    "inspirational",
-    "positive",
-    "positivity",
-    "mindset",
-    "grind",
-    "hustle",
-    "winner",
-    "winners",
-    "winning",
-    "achieve",
-    "achievement",
-    "greatness",
-    "destiny",
-    "abundance",
-    "manifest",
-    "dream",
-    "dreams",
-}
 
-PHILOSOPHY_HINTS = {
-    "death",
-    "time",
-    "truth",
-    "soul",
-    "self",
-    "silence",
-    "loneliness",
-    "suffering",
-    "existence",
-    "freedom",
-    "meaning",
-    "void",
-    "memory",
-    "beauty",
-    "love",
-    "fear",
-    "god",
-    "human",
-    "life",
-    "world",
-    "mind",
-    "being",
-    "nothingness",
-    "desire",
-    "wisdom",
-    "fate",
-    "consciousness",
-}
+def _decision(action: str, reason: str, detail: str) -> FilterDecision:
+    return FilterDecision(matched=True, action=action, reason=reason, detail=detail)
+
+
+def _matches_range(value: int, min_value: int, max_value: int) -> tuple[bool, str]:
+    if min_value > 0 and value < min_value:
+        return True, "below_min"
+    if max_value > 0 and value > max_value:
+        return True, "above_max"
+    return False, ""
+
+
+def evaluate_poem_filters(
+    poem: dict[str, object],
+    settings: PoetryFilterSettings,
+) -> FilterDecision:
+    lines = get_lines(poem)
+    english_text = get_nested(poem, "content", "en").strip()
+    normalized_lines = [line.strip().lower() for line in lines if line.strip()]
+    combined = " ".join(
+        [
+            get_nested(poem, "author", "en"),
+            get_nested(poem, "title", "en"),
+            english_text,
+        ]
+    ).lower()
+
+    if settings.line_count.enabled:
+        matched, reason = _matches_range(
+            len(lines),
+            settings.line_count.min_value,
+            settings.line_count.max_value,
+        )
+        if matched:
+            return _decision(
+                settings.line_count.action,
+                f"poetry.line_count.{reason}",
+                f"line_count={len(lines)}",
+            )
+
+    if settings.keyword_blacklist.enabled and settings.keyword_blacklist.items:
+        for term in settings.keyword_blacklist.items:
+            if term.lower() in combined:
+                return _decision(
+                    settings.keyword_blacklist.action,
+                    "poetry.keyword_blacklist.match",
+                    term,
+                )
+
+    if settings.average_line_length.enabled and lines:
+        threshold = settings.average_line_length.value
+        average_line_length = sum(len(line.strip()) for line in lines) / max(len(lines), 1)
+        if threshold > 0 and average_line_length < threshold:
+            return _decision(
+                settings.average_line_length.action,
+                "poetry.average_line_length.below_min",
+                f"average={average_line_length:.2f}",
+            )
+
+    if settings.unique_line_ratio.enabled and normalized_lines:
+        threshold = settings.unique_line_ratio.value
+        unique_ratio = len(set(normalized_lines)) / len(normalized_lines)
+        if threshold > 0 and unique_ratio < threshold:
+            return _decision(
+                settings.unique_line_ratio.action,
+                "poetry.unique_line_ratio.below_min",
+                f"ratio={unique_ratio:.2f}",
+            )
+
+    if settings.text_length.enabled:
+        matched, reason = _matches_range(
+            len(english_text),
+            settings.text_length.min_value,
+            settings.text_length.max_value,
+        )
+        if matched:
+            return _decision(
+                settings.text_length.action,
+                f"poetry.text_length.{reason}",
+                f"length={len(english_text)}",
+            )
+
+    return _accept()
+
+
+def evaluate_quote_filters(
+    text: str,
+    settings: QuoteFilterSettings,
+) -> FilterDecision:
+    normalized_text = text.strip().lower()
+
+    if settings.text_length.enabled:
+        matched, reason = _matches_range(
+            len(normalized_text),
+            settings.text_length.min_value,
+            settings.text_length.max_value,
+        )
+        if matched:
+            return _decision(
+                settings.text_length.action,
+                f"quotes.text_length.{reason}",
+                f"length={len(normalized_text)}",
+            )
+
+    if settings.phrase_blacklist.enabled and settings.phrase_blacklist.items:
+        for phrase in settings.phrase_blacklist.items:
+            if phrase.lower() in normalized_text:
+                return _decision(
+                    settings.phrase_blacklist.action,
+                    "quotes.phrase_blacklist.match",
+                    phrase,
+                )
+
+    if settings.soup_words.enabled and settings.soup_words.items:
+        soup_hits = sum(1 for word in settings.soup_words.items if word.lower() in normalized_text)
+        hint_hits = 0
+        if settings.philosophy_hints.enabled and settings.philosophy_hints.items:
+            hint_hits = sum(
+                1 for word in settings.philosophy_hints.items if word.lower() in normalized_text
+            )
+
+        if soup_hits >= settings.soup_words.threshold:
+            hint_threshold = settings.philosophy_hints.threshold
+            if not settings.philosophy_hints.enabled or hint_hits < hint_threshold:
+                return _decision(
+                    settings.soup_words.action,
+                    "quotes.soup_words.threshold",
+                    f"soup_hits={soup_hits}, hint_hits={hint_hits}",
+                )
+
+    if settings.exclamation_limit.enabled:
+        limit = settings.exclamation_limit.value
+        exclamation_count = normalized_text.count("!")
+        if limit > 0 and exclamation_count > limit:
+            return _decision(
+                settings.exclamation_limit.action,
+                "quotes.exclamation_limit.above_max",
+                f"count={exclamation_count}",
+            )
+
+    return _accept()
 
 
 def get_poem_review_reason(poem: dict[str, object]) -> str | None:
-    lines = get_lines(poem)
-    english_text = get_nested(poem, "content", "en").strip()
-
-    if not lines or not english_text:
-        return "empty"
-
-    if len(lines) < POEM_MIN_LINES:
-        return "too_short"
-
-    if len(lines) > POEM_MAX_LINES:
-        return "too_many_lines"
-
-    average_line_length = sum(len(line.strip()) for line in lines) / max(len(lines), 1)
-    if average_line_length < 12:
-        return "lines_too_short"
-
-    normalized_lines = [line.strip().lower() for line in lines if line.strip()]
-    if normalized_lines:
-        unique_ratio = len(set(normalized_lines)) / len(normalized_lines)
-        if unique_ratio < 0.6:
-            return "too_repetitive"
-
-    if len(english_text) < POEM_MIN_TEXT_LEN:
-        return "text_too_short"
-
-    if len(english_text) > POEM_MAX_TEXT_LEN:
-        return "text_too_long"
-
+    decision = evaluate_poem_filters(poem, FilterSettings().poetry)
+    if decision.matched and decision.action != "accept":
+        return decision.reason
     return None
 
 
 def get_quote_review_reason(text: str) -> str | None:
-    normalized_text = text.strip().lower()
-
-    if not normalized_text:
-        return "empty"
-
-    if len(normalized_text) < QUOTE_MIN_TEXT_LEN:
-        return "too_short"
-
-    if len(normalized_text) > QUOTE_MAX_TEXT_LEN:
-        return "too_long"
-
-    for phrase in SOUP_PHRASES:
-        if phrase in normalized_text:
-            return f"matched_phrase:{phrase}"
-
-    soup_hits = sum(1 for word in SOUP_WORDS if word in normalized_text)
-    philosophy_hits = sum(1 for word in PHILOSOPHY_HINTS if word in normalized_text)
-
-    if soup_hits >= 2 and philosophy_hits == 0:
-        return f"soup_words:{soup_hits}"
-
-    if normalized_text.count("!") >= 2:
-        return "too_many_exclamations"
-
+    decision = evaluate_quote_filters(text, FilterSettings().quotes)
+    if decision.matched and decision.action != "accept":
+        return decision.reason
     return None

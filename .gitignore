@@ -6,6 +6,7 @@
 # Python cache and virtual environments
 __pycache__/
 *.py[cod]
+*.pyc.*
 *.pyo
 *.pyd
 .venv/
@@ -20,8 +21,10 @@ htmlcov/
 # Build artifacts
 build/
 dist/
+spec/
 *.egg-info/
 pip-wheel-metadata/
+.qt_for_python/
 
 # Generated archives and local datasets
 output/
@@ -29,6 +32,7 @@ data/
 
 # Logs and editor state
 *.log
+logs/
 .DS_Store
 Thumbs.db
 .idea/

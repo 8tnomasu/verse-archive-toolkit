@@ -1,47 +1,9 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
 
-
-DEFAULT_OUTPUT_DIR = Path("output")
-DEFAULT_POEM_TARGET = 500
-DEFAULT_QUOTE_TARGET = 500
-DEFAULT_POETRY_BATCH_SIZE = 20
-DEFAULT_ZENQUOTES_INTERVAL = 1.5
-DEFAULT_SAVE_EVERY = 50
-DEFAULT_REQUEST_TIMEOUT = 30
-DEFAULT_MAX_RETRIES = 6
-
-
-@dataclass(slots=True)
-class ToolkitConfig:
-    output_dir: Path = DEFAULT_OUTPUT_DIR
-    poem_target: int = DEFAULT_POEM_TARGET
-    quote_target: int = DEFAULT_QUOTE_TARGET
-    poetry_batch_size: int = DEFAULT_POETRY_BATCH_SIZE
-    zenquotes_request_interval: float = DEFAULT_ZENQUOTES_INTERVAL
-    save_every: int = DEFAULT_SAVE_EVERY
-    request_timeout: int = DEFAULT_REQUEST_TIMEOUT
-    max_retries: int = DEFAULT_MAX_RETRIES
-    zenquotes_api_key: str = ""
-
-    @property
-    def poems_file(self) -> Path:
-        return self.output_dir / "english_poems.json"
-
-    @property
-    def poems_review_file(self) -> Path:
-        return self.output_dir / "english_poems_review.json"
-
-    @property
-    def quotes_file(self) -> Path:
-        return self.output_dir / "philosophy_quotes.json"
-
-    @property
-    def quotes_review_file(self) -> Path:
-        return self.output_dir / "philosophy_quotes_review.json"
+from verse_archive_toolkit.settings import ToolkitConfig
 
 
 def load_dotenv_file(path: Path | None = None) -> None:
@@ -67,3 +29,6 @@ def load_zenquotes_api_key(explicit_value: str | None = None) -> str:
         return explicit_value.strip()
 
     return os.getenv("ZENQUOTES_API_KEY", "").strip()
+
+
+__all__ = ["ToolkitConfig", "load_dotenv_file", "load_zenquotes_api_key"]

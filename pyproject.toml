@@ -4,17 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "verse-archive-toolkit"
-version = "0.1.0"
-description = "A CLI toolkit for building curated poetry and philosophy quote archives."
+version = "0.2.0"
+description = "Desktop and CLI tools for building, reviewing, and translating verse archives."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "platformdirs>=3.8,<4",
+  "PySide6>=6.7,<7",
   "requests>=2.31,<3",
 ]
 authors = [
   { name = "8tnomasu" },
 ]
-keywords = ["poetry", "quotes", "dataset", "archive", "cli"]
+keywords = ["poetry", "quotes", "dataset", "archive", "cli", "desktop", "gui"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
@@ -24,6 +26,15 @@ classifiers = [
 
 [project.scripts]
 verse-archive = "verse_archive_toolkit.cli:main"
+
+[project.gui-scripts]
+verse-archive-gui = "verse_archive_toolkit.gui.builder_app:main"
+verse-archive-translator = "verse_archive_toolkit.gui.translator_app:main"
+
+[project.optional-dependencies]
+packaging = [
+  "pyinstaller>=6.19,<7",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
