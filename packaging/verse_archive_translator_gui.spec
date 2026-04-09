@@ -7,7 +7,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 project_root = Path.cwd()
 src_root = project_root / "src"
-entry_script = src_root / "verse_archive_toolkit" / "builder_gui_entry.py"
+entry_script = src_root / "verse_archive_toolkit" / "translator_gui_entry.py"
 
 pyside_datas, pyside_binaries, pyside_hiddenimports = collect_all("PySide6")
 hiddenimports = pyside_hiddenimports + collect_submodules("shiboken6")
@@ -32,7 +32,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="VerseArchiveToolkit",
+    name="VerseArchiveTranslator",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -48,5 +48,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    name="VerseArchiveToolkit",
+    name="VerseArchiveTranslator",
 )

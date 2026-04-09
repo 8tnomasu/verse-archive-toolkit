@@ -45,11 +45,63 @@ from verse_archive_toolkit.settings import (
 from verse_archive_toolkit.settings_store import SettingsStore
 
 
+ACTION_LABELS = {
+    "accept": "通過",
+    "review": "待審",
+    "reject": "拒絕",
+}
+
+REASON_LABELS = {
+    "poems.invalid_payload": "詩作來源回應格式異常",
+    "poems.invalid_item": "詩作資料欄位不完整",
+    "poems.duplicate": "重複詩作",
+    "poems.review": "進入待審",
+    "poems.reject": "直接拒絕",
+    "poetry.line_count.below_min": "行數不足",
+    "poetry.line_count.above_max": "行數過多",
+    "poetry.keyword_blacklist.match": "命中詩作關鍵字排除",
+    "poetry.average_line_length.below_min": "平均每行字數不足",
+    "poetry.unique_line_ratio.below_min": "重複率過高",
+    "poetry.text_length.below_min": "全文字數不足",
+    "poetry.text_length.above_max": "全文字數過長",
+    "quotes.invalid_author_tag": "作者標籤無效",
+    "quotes.author_fetch_error": "抓取作者語錄失敗",
+    "quotes.invalid_item": "語錄資料欄位不完整",
+    "quotes.duplicate": "重複語錄",
+    "quotes.review": "進入待審",
+    "quotes.reject": "直接拒絕",
+    "quotes.text_length.below_min": "語錄字數不足",
+    "quotes.text_length.above_max": "語錄字數過長",
+    "quotes.phrase_blacklist.match": "命中黑名單片語",
+    "quotes.soup_words.threshold": "命中心靈雞湯關鍵字",
+    "quotes.exclamation_limit.above_max": "驚嘆號過多",
+}
+
+SOURCE_LABELS = {
+    "poems": "英文詩",
+    "quotes": "哲思語錄",
+}
+
+
+def _humanize_reason(reason: str) -> str:
+    return REASON_LABELS.get(reason, reason)
+
+
+def _humanize_source(source: str) -> str:
+    return SOURCE_LABELS.get(source, source)
+
+
+def _set_combo_data(combo: QComboBox, value: str) -> None:
+    index = combo.findData(value)
+    if index >= 0:
+        combo.setCurrentIndex(index)
+
+
 def _action_combo() -> QComboBox:
     combo = QComboBox()
-    combo.addItem("accept", "accept")
-    combo.addItem("review", "review")
-    combo.addItem("reject", "reject")
+    combo.addItem(ACTION_LABELS["accept"], "accept")
+    combo.addItem(ACTION_LABELS["review"], "review")
+    combo.addItem(ACTION_LABELS["reject"], "reject")
     return combo
 
 
@@ -71,17 +123,17 @@ class RangeRuleEditor(QGroupBox):
             self.min_spin.setRange(0.0, maximum)
             self.max_spin.setRange(0.0, maximum)
 
-        self.min_spin.setSpecialValueText("0 = no limit")
-        self.max_spin.setSpecialValueText("0 = no limit")
+        self.min_spin.setSpecialValueText("0 = 不設限")
+        self.max_spin.setSpecialValueText("0 = 不設限")
 
         layout = QFormLayout(self)
-        layout.addRow("Action", self.action_combo)
-        layout.addRow("Minimum", self.min_spin)
-        layout.addRow("Maximum", self.max_spin)
+        layout.addRow("處理方式", self.action_combo)
+        layout.addRow("最小值", self.min_spin)
+        layout.addRow("最大值", self.max_spin)
 
     def set_rule(self, rule: RangeActionRule) -> None:
         self.setChecked(rule.enabled)
-        self.action_combo.setCurrentText(rule.action)
+        _set_combo_data(self.action_combo, rule.action)
         self.min_spin.setValue(rule.min_value)
         self.max_spin.setValue(rule.max_value)
 
@@ -111,16 +163,16 @@ class NumericRuleEditor(QGroupBox):
         self.value_spin.setDecimals(decimals)
         self.value_spin.setRange(0.0, maximum)
         self.value_spin.setSingleStep(1.0 if decimals == 0 else 0.05)
-        self.value_spin.setSpecialValueText("0 = no limit")
+        self.value_spin.setSpecialValueText("0 = 不設限")
 
         layout = QFormLayout(self)
         if show_action:
-            layout.addRow("Action", self.action_combo)
-        layout.addRow("Value", self.value_spin)
+            layout.addRow("處理方式", self.action_combo)
+        layout.addRow("數值", self.value_spin)
 
     def set_rule(self, rule: NumericActionRule) -> None:
         self.setChecked(rule.enabled)
-        self.action_combo.setCurrentText(rule.action)
+        _set_combo_data(self.action_combo, rule.action)
         self.value_spin.setValue(rule.value)
 
     def get_rule(self) -> NumericActionRule:
@@ -147,18 +199,18 @@ class KeywordRuleEditor(QGroupBox):
         self.threshold_spin = QSpinBox()
         self.threshold_spin.setRange(1, 9999)
         self.items_edit = QPlainTextEdit()
-        self.items_edit.setPlaceholderText("One keyword or phrase per line")
+        self.items_edit.setPlaceholderText("每行一個關鍵字或片語")
 
         layout = QFormLayout(self)
         if show_action:
-            layout.addRow("Action", self.action_combo)
+            layout.addRow("處理方式", self.action_combo)
         if show_threshold:
-            layout.addRow("Match threshold", self.threshold_spin)
-        layout.addRow("Items", self.items_edit)
+            layout.addRow("命中門檻", self.threshold_spin)
+        layout.addRow("清單內容", self.items_edit)
 
     def set_rule(self, rule: KeywordActionRule) -> None:
         self.setChecked(rule.enabled)
-        self.action_combo.setCurrentText(rule.action)
+        _set_combo_data(self.action_combo, rule.action)
         self.threshold_spin.setValue(rule.threshold)
         self.items_edit.setPlainText("\n".join(rule.items))
 
@@ -175,17 +227,17 @@ class QuoteFilterEditor(QWidget):
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("0 means no limit for range-based rules."))
+        layout.addWidget(QLabel("數值型規則中，0 代表不設限。"))
 
-        self.text_length = RangeRuleEditor("Quote text length")
-        self.phrase_blacklist = KeywordRuleEditor("Phrase blacklist")
-        self.soup_words = KeywordRuleEditor("Soup-word blacklist", show_threshold=True)
+        self.text_length = RangeRuleEditor("語錄字數範圍")
+        self.phrase_blacklist = KeywordRuleEditor("黑名單片語")
+        self.soup_words = KeywordRuleEditor("心靈雞湯關鍵字", show_threshold=True)
         self.philosophy_hints = KeywordRuleEditor(
-            "Philosophy hints (used to exempt soup-word hits)",
+            "哲思提示詞（用來豁免雞湯詞命中）",
             show_action=False,
             show_threshold=True,
         )
-        self.exclamation_limit = NumericRuleEditor("Exclamation limit")
+        self.exclamation_limit = NumericRuleEditor("驚嘆號上限")
 
         for widget in (
             self.text_length,
@@ -219,13 +271,13 @@ class PoetryFilterEditor(QWidget):
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("0 means no limit for range-based rules."))
+        layout.addWidget(QLabel("數值型規則中，0 代表不設限。"))
 
-        self.line_count = RangeRuleEditor("Poem line count")
-        self.text_length = RangeRuleEditor("Poem text length")
-        self.average_line_length = NumericRuleEditor("Average line length", decimals=1)
-        self.unique_line_ratio = NumericRuleEditor("Unique line ratio", decimals=2, maximum=1.0)
-        self.keyword_blacklist = KeywordRuleEditor("Title / author / content blacklist")
+        self.line_count = RangeRuleEditor("詩作行數範圍")
+        self.text_length = RangeRuleEditor("詩作全文字數範圍")
+        self.average_line_length = NumericRuleEditor("平均每行字數下限", decimals=1)
+        self.unique_line_ratio = NumericRuleEditor("唯一行比例下限", decimals=2, maximum=1.0)
+        self.keyword_blacklist = KeywordRuleEditor("標題 / 作者 / 內容排除關鍵字")
 
         for widget in (
             self.line_count,
@@ -262,8 +314,8 @@ class FilterSettingsEditor(QWidget):
         tabs = QTabWidget()
         self.quote_editor = QuoteFilterEditor()
         self.poetry_editor = PoetryFilterEditor()
-        tabs.addTab(self.quote_editor, "Quotes")
-        tabs.addTab(self.poetry_editor, "Poetry")
+        tabs.addTab(self.quote_editor, "哲思語錄規則")
+        tabs.addTab(self.poetry_editor, "英文詩規則")
         layout.addWidget(tabs)
 
     def set_settings(self, settings: FilterSettings) -> None:
@@ -335,28 +387,28 @@ class BuilderMainWindow(QMainWindow):
         self._source_progress: dict[str, BuildProgress] = {}
         self._translator_window: QWidget | None = None
 
-        self.setWindowTitle("Verse Archive Toolkit")
+        self.setWindowTitle("Verse Archive Toolkit 建庫工具")
         self.resize(1100, 860)
         self._build_ui()
         self._apply_settings(self.settings)
         self._refresh_api_key_hint()
-        self._append_log(f"Settings file: {self.settings_store.path}")
+        self._append_log(f"設定檔位置：{self.settings_store.path}")
 
     def _build_ui(self) -> None:
         central = QWidget()
         main_layout = QVBoxLayout(central)
 
-        header = QLabel("Desktop archive builder for Verse Archive Toolkit")
+        header = QLabel("Verse Archive Toolkit 建庫工具")
         header.setStyleSheet("font-size: 20px; font-weight: 600;")
         main_layout.addWidget(header)
 
         tabs = QTabWidget()
-        tabs.addTab(self._create_build_tab(), "Build")
-        tabs.addTab(self._create_filter_tab(), "Filter Rules")
+        tabs.addTab(self._create_build_tab(), "建庫")
+        tabs.addTab(self._create_filter_tab(), "過濾規則")
         main_layout.addWidget(tabs)
 
         footer = QLabel(
-            "Local settings are stored outside the repo. API keys are saved locally and shown masked in the UI."
+            "本機設定檔與啟動日誌會存放在使用者目錄，不會寫回 Git 倉庫；API key 只在本機保存，介面中只顯示遮罩後內容。"
         )
         footer.setWordWrap(True)
         footer.setStyleSheet("color: #555;")
@@ -415,7 +467,7 @@ class BuilderMainWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        config_group = QGroupBox("Build configuration")
+        config_group = QGroupBox("建庫設定")
         form = QFormLayout(config_group)
 
         self.api_key_edit = QLineEdit()
@@ -428,23 +480,23 @@ class BuilderMainWindow(QMainWindow):
         api_key_layout.setContentsMargins(0, 0, 0, 0)
         api_key_layout.addWidget(self.api_key_edit)
         api_key_layout.addWidget(self.api_key_hint)
-        form.addRow("ZenQuotes API key", api_key_box)
+        form.addRow("ZenQuotes API 金鑰", api_key_box)
 
         self.output_dir_edit = QLineEdit()
-        browse_button = QPushButton("Browse...")
+        browse_button = QPushButton("瀏覽...")
         browse_button.clicked.connect(self._browse_output_dir)
         path_row = QWidget()
         path_layout = QHBoxLayout(path_row)
         path_layout.setContentsMargins(0, 0, 0, 0)
         path_layout.addWidget(self.output_dir_edit, 1)
         path_layout.addWidget(browse_button)
-        form.addRow("Output directory", path_row)
+        form.addRow("輸出資料夾", path_row)
 
         self.source_combo = QComboBox()
-        self.source_combo.addItem("Poems + Quotes", "all")
-        self.source_combo.addItem("Poems only", "poems")
-        self.source_combo.addItem("Quotes only", "quotes")
-        form.addRow("Build source", self.source_combo)
+        self.source_combo.addItem("英文詩 + 哲思語錄", "all")
+        self.source_combo.addItem("只抓英文詩", "poems")
+        self.source_combo.addItem("只抓哲思語錄", "quotes")
+        form.addRow("建庫來源", self.source_combo)
 
         self.poem_target_spin = QSpinBox()
         self.poem_target_spin.setRange(0, 100000)
@@ -463,24 +515,24 @@ class BuilderMainWindow(QMainWindow):
         self.max_retries_spin = QSpinBox()
         self.max_retries_spin.setRange(1, 50)
 
-        form.addRow("Poem target", self.poem_target_spin)
-        form.addRow("Quote target", self.quote_target_spin)
-        form.addRow("Batch size", self.batch_size_spin)
-        form.addRow("Request interval (s)", self.interval_spin)
-        form.addRow("Auto save every", self.save_every_spin)
-        form.addRow("Request timeout (s)", self.request_timeout_spin)
-        form.addRow("Max retries", self.max_retries_spin)
+        form.addRow("英文詩目標數量", self.poem_target_spin)
+        form.addRow("哲思句目標數量", self.quote_target_spin)
+        form.addRow("每批抓取筆數", self.batch_size_spin)
+        form.addRow("請求間隔（秒）", self.interval_spin)
+        form.addRow("每幾筆自動儲存", self.save_every_spin)
+        form.addRow("請求逾時（秒）", self.request_timeout_spin)
+        form.addRow("最大重試次數", self.max_retries_spin)
         layout.addWidget(config_group)
 
         button_row = QHBoxLayout()
-        self.save_settings_button = QPushButton("Save Settings")
+        self.save_settings_button = QPushButton("儲存設定")
         self.save_settings_button.clicked.connect(self._save_settings)
-        self.start_button = QPushButton("Start Build")
+        self.start_button = QPushButton("開始建庫")
         self.start_button.clicked.connect(self._start_build)
-        self.cancel_button = QPushButton("Stop / Cancel")
+        self.cancel_button = QPushButton("停止 / 取消")
         self.cancel_button.clicked.connect(self._cancel_build)
         self.cancel_button.setEnabled(False)
-        self.open_translator_button = QPushButton("Open Translator")
+        self.open_translator_button = QPushButton("開啟翻譯工具")
         self.open_translator_button.clicked.connect(self._open_translator_window)
 
         button_row.addWidget(self.save_settings_button)
@@ -490,12 +542,12 @@ class BuilderMainWindow(QMainWindow):
         button_row.addWidget(self.open_translator_button)
         layout.addLayout(button_row)
 
-        progress_group = QGroupBox("Build status")
+        progress_group = QGroupBox("執行狀態")
         progress_layout = QVBoxLayout(progress_group)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
-        self.status_label = QLabel("Idle")
-        self.summary_label = QLabel("No build started yet.")
+        self.status_label = QLabel("待命中")
+        self.summary_label = QLabel("尚未開始建庫。")
         self.summary_label.setWordWrap(True)
         self.summary_label.setStyleSheet("color: #555;")
 
@@ -506,15 +558,15 @@ class BuilderMainWindow(QMainWindow):
         self.skipped_label = QLabel("0")
         self.processed_label = QLabel("0")
 
-        stats_grid.addWidget(QLabel("Accepted"), 0, 0)
+        stats_grid.addWidget(QLabel("已通過"), 0, 0)
         stats_grid.addWidget(self.accepted_label, 0, 1)
-        stats_grid.addWidget(QLabel("Review"), 0, 2)
+        stats_grid.addWidget(QLabel("待審"), 0, 2)
         stats_grid.addWidget(self.review_label, 0, 3)
-        stats_grid.addWidget(QLabel("Rejected"), 1, 0)
+        stats_grid.addWidget(QLabel("已拒絕"), 1, 0)
         stats_grid.addWidget(self.rejected_label, 1, 1)
-        stats_grid.addWidget(QLabel("Skipped"), 1, 2)
+        stats_grid.addWidget(QLabel("已略過"), 1, 2)
         stats_grid.addWidget(self.skipped_label, 1, 3)
-        stats_grid.addWidget(QLabel("Processed this run"), 2, 0)
+        stats_grid.addWidget(QLabel("本次已處理"), 2, 0)
         stats_grid.addWidget(self.processed_label, 2, 1)
 
         self.log_output = QPlainTextEdit()
@@ -525,7 +577,7 @@ class BuilderMainWindow(QMainWindow):
         progress_layout.addWidget(self.status_label)
         progress_layout.addLayout(stats_grid)
         progress_layout.addWidget(self.summary_label)
-        progress_layout.addWidget(QLabel("Log output"))
+        progress_layout.addWidget(QLabel("日誌輸出"))
         progress_layout.addWidget(self.log_output)
         layout.addWidget(progress_group, 1)
 
@@ -536,7 +588,7 @@ class BuilderMainWindow(QMainWindow):
         layout = QVBoxLayout(widget)
 
         description = QLabel(
-            "Edit the live filtering rules used by the builder. Each rule can be enabled, disabled, set to accept, review, or reject, and reset to project defaults."
+            "這裡的規則會直接套用到目前建庫流程。每條規則都可啟用或停用，並設定命中後要通過、進待審，或直接拒絕。"
         )
         description.setWordWrap(True)
         layout.addWidget(description)
@@ -548,12 +600,12 @@ class BuilderMainWindow(QMainWindow):
         layout.addWidget(scroll_area, 1)
 
         button_row = QHBoxLayout()
-        save_button = QPushButton("Save Filter Settings")
-        save_button.clicked.connect(self._save_settings)
-        reset_button = QPushButton("Restore Filter Defaults")
-        reset_button.clicked.connect(self._restore_filter_defaults)
-        button_row.addWidget(save_button)
-        button_row.addWidget(reset_button)
+        self.filter_save_button = QPushButton("儲存過濾設定")
+        self.filter_save_button.clicked.connect(self._save_settings)
+        self.filter_reset_button = QPushButton("還原預設值")
+        self.filter_reset_button.clicked.connect(self._restore_filter_defaults)
+        button_row.addWidget(self.filter_save_button)
+        button_row.addWidget(self.filter_reset_button)
         button_row.addStretch(1)
         layout.addLayout(button_row)
 
@@ -592,14 +644,14 @@ class BuilderMainWindow(QMainWindow):
 
     def _refresh_api_key_hint(self) -> None:
         self.api_key_hint.setText(
-            "Displayed masked in the UI and never echoed into the log: "
+            "介面僅顯示遮罩後的內容，且不會寫入日誌："
             f"{mask_secret(self.api_key_edit.text())}"
         )
 
     def _browse_output_dir(self) -> None:
         selected = QFileDialog.getExistingDirectory(
             self,
-            "Choose output directory",
+            "選擇輸出資料夾",
             self.output_dir_edit.text().strip() or str(Path.cwd()),
         )
         if selected:
@@ -611,28 +663,30 @@ class BuilderMainWindow(QMainWindow):
     def _save_settings(self) -> None:
         self.settings = self._collect_settings()
         saved_path = self.settings_store.save(self.settings)
-        self._append_log(f"Saved settings to {saved_path}")
-        self.status_label.setText("Settings saved.")
+        self._append_log(f"設定已儲存至 {saved_path}")
+        self.status_label.setText("設定已儲存。")
 
     def _restore_filter_defaults(self) -> None:
         self.filter_editor.set_settings(FilterSettings())
-        self.status_label.setText("Filter rules restored to defaults.")
-        self._append_log("Filter rules restored to defaults.")
+        self.status_label.setText("過濾規則已還原為預設值。")
+        self._append_log("過濾規則已還原為預設值。")
 
     def _toggle_running_state(self, is_running: bool) -> None:
         self.start_button.setEnabled(not is_running)
         self.cancel_button.setEnabled(is_running)
         self.save_settings_button.setEnabled(not is_running)
         self.open_translator_button.setEnabled(not is_running)
+        self.filter_save_button.setEnabled(not is_running)
+        self.filter_reset_button.setEnabled(not is_running)
 
     def _start_build(self) -> None:
         self._save_settings()
         self._source_progress.clear()
         self.progress_bar.setValue(0)
-        self.status_label.setText("Starting build...")
-        self.summary_label.setText("Build is running.")
+        self.status_label.setText("準備開始建庫...")
+        self.summary_label.setText("建庫執行中。")
         self.log_output.clear()
-        self._append_log("Build requested.")
+        self._append_log("已送出建庫工作。")
 
         self._toggle_running_state(True)
         self._thread = QThread(self)
@@ -652,8 +706,8 @@ class BuilderMainWindow(QMainWindow):
         if self._worker is None:
             return
         self._worker.cancel()
-        self.status_label.setText("Cancellation requested...")
-        self._append_log("Cancellation requested by user.")
+        self.status_label.setText("已送出取消要求...")
+        self._append_log("使用者要求取消建庫。")
 
     def _handle_progress(self, payload: object) -> None:
         if not isinstance(payload, BuildProgress):
@@ -693,32 +747,33 @@ class BuilderMainWindow(QMainWindow):
             if not isinstance(result, BuildResult):
                 continue
             summary_lines.append(
-                f"{source_name}: accepted={result.accepted_count}, review={result.review_count}, "
-                f"rejected={result.rejected_count}, skipped={result.skipped_count}"
+                f"{_humanize_source(source_name)}：已通過 {result.accepted_count} 筆，"
+                f"待審 {result.review_count} 筆，已拒絕 {result.rejected_count} 筆，"
+                f"已略過 {result.skipped_count} 筆"
             )
             if result.reason_counts:
                 top_reasons = ", ".join(
-                    f"{reason} ({count})"
+                    f"{_humanize_reason(reason)}（{count}）"
                     for reason, count in sorted(
                         result.reason_counts.items(),
                         key=lambda item: item[1],
                         reverse=True,
                     )[:5]
                 )
-                summary_lines.append(f"  top reasons: {top_reasons}")
+                summary_lines.append(f"主要命中原因：{top_reasons}")
 
-        self.summary_label.setText("\n".join(summary_lines) if summary_lines else "Build finished.")
-        self.status_label.setText("Build completed.")
+        self.summary_label.setText("\n".join(summary_lines) if summary_lines else "建庫已完成。")
+        self.status_label.setText("建庫已完成。")
         self.progress_bar.setValue(100)
-        self._append_log("Build completed successfully.")
+        self._append_log("建庫已成功完成。")
         self._toggle_running_state(False)
 
     def _handle_failed(self, message: str) -> None:
-        self.status_label.setText("Build failed.")
+        self.status_label.setText("建庫失敗。")
         self.summary_label.setText(message)
-        self._append_log(f"Build failed: {message}")
+        self._append_log(f"建庫失敗：{message}")
         self._toggle_running_state(False)
-        QMessageBox.critical(self, "Build failed", message)
+        QMessageBox.critical(self, "建庫失敗", message)
 
     def _cleanup_thread(self) -> None:
         if self._thread is not None:
@@ -746,8 +801,8 @@ class BuilderMainWindow(QMainWindow):
         if self._worker is not None:
             response = QMessageBox.question(
                 self,
-                "Build in progress",
-                "A build is still running. Cancel it and close the window?",
+                "建庫仍在執行",
+                "目前仍有建庫工作在執行中。要先取消並關閉視窗嗎？",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -766,3 +821,7 @@ def main() -> int:
     window = BuilderMainWindow()
     window.show()
     return app.exec()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

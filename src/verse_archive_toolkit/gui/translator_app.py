@@ -32,6 +32,25 @@ from verse_archive_toolkit.translator import (
     translation_state,
 )
 
+TYPE_LABELS = {
+    "english_poem": "英文詩",
+    "philosophy": "哲思語錄",
+}
+
+STATE_LABELS = {
+    "translated": "已完成翻譯",
+    "partial": "部分翻譯",
+    "untranslated": "未翻譯",
+}
+
+
+def _humanize_type_label(type_label: str) -> str:
+    return TYPE_LABELS.get(type_label, type_label or "未分類")
+
+
+def _humanize_translation_state(state: str) -> str:
+    return STATE_LABELS.get(state, state)
+
 
 class TranslationWindow(QMainWindow):
     def __init__(self, settings_store: SettingsStore | None = None) -> None:
@@ -44,10 +63,10 @@ class TranslationWindow(QMainWindow):
         self._dirty = False
         self._selection_guard = False
 
-        self.setWindowTitle("Verse Archive Toolkit Translator")
+        self.setWindowTitle("Verse Archive Toolkit 翻譯輔助工具")
         self.resize(1180, 780)
         self._build_ui()
-        self._load_directory(Path(self.settings.translation.data_dir))
+        self._load_directory(Path(self.settings.translation.data_dir), show_message=False)
         self._apply_style()
 
     def _apply_style(self) -> None:
@@ -75,11 +94,11 @@ class TranslationWindow(QMainWindow):
 
         path_row = QHBoxLayout()
         self.data_dir_edit = QLineEdit()
-        browse_button = QPushButton("Data Directory...")
+        browse_button = QPushButton("選擇資料夾...")
         browse_button.clicked.connect(self._browse_directory)
-        reload_button = QPushButton("Reload")
+        reload_button = QPushButton("重新載入")
         reload_button.clicked.connect(self._reload_repository)
-        path_row.addWidget(QLabel("Archive directory"))
+        path_row.addWidget(QLabel("資料來源目錄"))
         path_row.addWidget(self.data_dir_edit, 1)
         path_row.addWidget(browse_button)
         path_row.addWidget(reload_button)
@@ -87,18 +106,19 @@ class TranslationWindow(QMainWindow):
 
         filter_row = QHBoxLayout()
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Search author.en, title.en, content.en, or content.lines")
+        self.search_edit.setPlaceholderText("搜尋 author.en、title.en、content.en 或 content.lines")
         self.search_edit.textChanged.connect(self._refresh_results)
         self.type_filter_combo = QComboBox()
-        self.type_filter_combo.addItem("All types", "all")
-        self.type_filter_combo.addItem("English poems", "poems")
-        self.type_filter_combo.addItem("Philosophy quotes", "quotes")
+        self.type_filter_combo.addItem("全部類型", "all")
+        self.type_filter_combo.addItem("只看英文詩", "poems")
+        self.type_filter_combo.addItem("只看哲思語錄", "quotes")
         self.type_filter_combo.currentIndexChanged.connect(self._refresh_results)
         self.random_state_combo = QComboBox()
-        self.random_state_combo.addItem("Any translation state", "all")
-        self.random_state_combo.addItem("Completely untranslated", "untranslated")
-        self.random_state_combo.addItem("Partially translated", "partial")
-        random_button = QPushButton("Random Pick")
+        self.random_state_combo.addItem("不限翻譯狀態", "all")
+        self.random_state_combo.addItem("完全未翻譯", "untranslated")
+        self.random_state_combo.addItem("部分已翻譯", "partial")
+        self.random_state_combo.addItem("已完成翻譯", "translated")
+        random_button = QPushButton("隨機抽取")
         random_button.clicked.connect(self._random_pick)
         filter_row.addWidget(self.search_edit, 1)
         filter_row.addWidget(self.type_filter_combo)
@@ -111,13 +131,13 @@ class TranslationWindow(QMainWindow):
         self.translated_label = QLabel("0")
         self.partial_label = QLabel("0")
         self.untranslated_label = QLabel("0")
-        stats_grid.addWidget(QLabel("Total"), 0, 0)
+        stats_grid.addWidget(QLabel("總筆數"), 0, 0)
         stats_grid.addWidget(self.total_label, 0, 1)
-        stats_grid.addWidget(QLabel("Translated"), 0, 2)
+        stats_grid.addWidget(QLabel("已完成翻譯"), 0, 2)
         stats_grid.addWidget(self.translated_label, 0, 3)
-        stats_grid.addWidget(QLabel("Partial"), 1, 0)
+        stats_grid.addWidget(QLabel("部分翻譯"), 1, 0)
         stats_grid.addWidget(self.partial_label, 1, 1)
-        stats_grid.addWidget(QLabel("Untranslated"), 1, 2)
+        stats_grid.addWidget(QLabel("未翻譯"), 1, 2)
         stats_grid.addWidget(self.untranslated_label, 1, 3)
         layout.addLayout(stats_grid)
 
@@ -125,7 +145,7 @@ class TranslationWindow(QMainWindow):
 
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        left_layout.addWidget(QLabel("Search results"))
+        left_layout.addWidget(QLabel("搜尋結果"))
         self.results_list = QListWidget()
         self.results_list.currentItemChanged.connect(self._on_result_changed)
         left_layout.addWidget(self.results_list)
@@ -139,9 +159,9 @@ class TranslationWindow(QMainWindow):
         self.file_label = QLabel("-")
         self.type_label = QLabel("-")
         self.state_label = QLabel("-")
-        meta_form.addRow("File", self.file_label)
-        meta_form.addRow("Type", self.type_label)
-        meta_form.addRow("Translation state", self.state_label)
+        meta_form.addRow("檔案", self.file_label)
+        meta_form.addRow("類型", self.type_label)
+        meta_form.addRow("翻譯狀態", self.state_label)
         right_layout.addWidget(meta_group)
 
         self.title_en_view = QLineEdit()
@@ -153,9 +173,9 @@ class TranslationWindow(QMainWindow):
 
         source_group = QWidget()
         source_form = QFormLayout(source_group)
-        source_form.addRow("Title (EN)", self.title_en_view)
-        source_form.addRow("Author (EN)", self.author_en_view)
-        source_form.addRow("Content (EN)", self.content_en_view)
+        source_form.addRow("標題（英文）", self.title_en_view)
+        source_form.addRow("作者（英文）", self.author_en_view)
+        source_form.addRow("內容（英文）", self.content_en_view)
         right_layout.addWidget(source_group)
 
         self.title_cn_edit = QLineEdit()
@@ -167,17 +187,17 @@ class TranslationWindow(QMainWindow):
 
         translation_group = QWidget()
         translation_form = QFormLayout(translation_group)
-        translation_form.addRow("Title (CN)", self.title_cn_edit)
-        translation_form.addRow("Author (CN)", self.author_cn_edit)
-        translation_form.addRow("Content (CN)", self.content_cn_edit)
+        translation_form.addRow("標題（中文）", self.title_cn_edit)
+        translation_form.addRow("作者（中文）", self.author_cn_edit)
+        translation_form.addRow("內容（中文）", self.content_cn_edit)
         right_layout.addWidget(translation_group, 1)
 
         button_row = QHBoxLayout()
-        self.prev_button = QPushButton("Previous")
+        self.prev_button = QPushButton("上一筆")
         self.prev_button.clicked.connect(lambda: self._move_selection(-1))
-        self.next_button = QPushButton("Next")
+        self.next_button = QPushButton("下一筆")
         self.next_button.clicked.connect(lambda: self._move_selection(1))
-        self.save_button = QPushButton("Save Translation")
+        self.save_button = QPushButton("儲存翻譯")
         self.save_button.clicked.connect(self._save_current_entry)
         button_row.addWidget(self.prev_button)
         button_row.addWidget(self.next_button)
@@ -185,7 +205,7 @@ class TranslationWindow(QMainWindow):
         button_row.addWidget(self.save_button)
         right_layout.addLayout(button_row)
 
-        self.status_note = QLabel("Ready")
+        self.status_note = QLabel("就緒")
         right_layout.addWidget(self.status_note)
 
         splitter.addWidget(right_panel)
@@ -198,7 +218,7 @@ class TranslationWindow(QMainWindow):
     def _browse_directory(self) -> None:
         selected = QFileDialog.getExistingDirectory(
             self,
-            "Choose archive directory",
+            "選擇資料來源目錄",
             self.data_dir_edit.text().strip() or str(Path.cwd()),
         )
         if not selected:
@@ -208,22 +228,25 @@ class TranslationWindow(QMainWindow):
     def _reload_repository(self) -> None:
         self._load_directory(Path(self.data_dir_edit.text().strip() or "output"))
 
-    def _load_directory(self, directory: Path) -> None:
+    def _load_directory(self, directory: Path, *, show_message: bool = True) -> None:
         self.data_dir_edit.setText(str(directory))
         self.repository = TranslationRepository(directory)
         try:
             self.repository.load()
         except TranslationRepositoryError as error:
-            QMessageBox.warning(self, "Unable to load archives", str(error))
+            if show_message:
+                QMessageBox.warning(self, "無法載入資料", str(error))
             self.results_list.clear()
             self.current_results = []
+            self.repository = None
             self._update_stats()
+            self.status_note.setText("找不到可用資料來源，請先選擇資料夾。")
             return
 
         self.settings.translation.data_dir = str(directory)
         self.settings_store.save(self.settings)
         self._refresh_results()
-        self.status_note.setText(f"Loaded archive directory: {directory}")
+        self.status_note.setText(f"已載入資料來源目錄：{directory}")
 
     def _update_stats(self) -> None:
         if self.repository is None:
@@ -257,16 +280,20 @@ class TranslationWindow(QMainWindow):
 
         for entry in self.current_results:
             state = translation_state(entry.record)
-            title = entry.title_en or "(untitled)"
-            author = entry.author_en or "(unknown)"
+            title = entry.title_en or "（無標題）"
+            author = entry.author_en or "（作者未填）"
             item = QListWidgetItem(
-                f"[{entry.type_label}] {title} | {author}\n{entry.summary}\nState: {state}"
+                f"[{_humanize_type_label(entry.type_label)}] {title} | {author}\n"
+                f"{entry.summary}\n翻譯狀態：{_humanize_translation_state(state)}"
             )
             item.setData(Qt.UserRole, entry)
             self.results_list.addItem(item)
 
         self._update_stats()
-        self.status_note.setText(f"{len(self.current_results)} result(s) ready.")
+        if self.current_results:
+            self.status_note.setText(f"共有 {len(self.current_results)} 筆符合條件。")
+        else:
+            self.status_note.setText("目前沒有符合條件的資料。")
 
         if preserve_signature:
             for row in range(self.results_list.count()):
@@ -279,6 +306,7 @@ class TranslationWindow(QMainWindow):
             self.results_list.setCurrentRow(0)
         else:
             self._populate_entry(None)
+            self.status_note.setText("目前沒有符合條件的資料。")
 
     def _populate_entry(self, entry: ArchiveEntry | None) -> None:
         self.current_entry = entry
@@ -295,12 +323,12 @@ class TranslationWindow(QMainWindow):
                 self.author_cn_edit.clear()
                 self.content_cn_edit.clear()
                 self._dirty = False
-                self.status_note.setText("No record selected.")
+                self.status_note.setText("尚未選取資料。")
                 return
 
             self.file_label.setText(entry.file_path.name)
-            self.type_label.setText(entry.type_label)
-            self.state_label.setText(translation_state(entry.record))
+            self.type_label.setText(_humanize_type_label(entry.type_label))
+            self.state_label.setText(_humanize_translation_state(translation_state(entry.record)))
             self.title_en_view.setText(entry.title_en)
             self.author_en_view.setText(entry.author_en)
             self.content_en_view.setPlainText(entry.content_en)
@@ -308,7 +336,7 @@ class TranslationWindow(QMainWindow):
             self.author_cn_edit.setText(entry.record.get("author", {}).get("cn", ""))
             self.content_cn_edit.setPlainText(entry.record.get("content", {}).get("cn", ""))
             self._dirty = False
-            self.status_note.setText("Record loaded.")
+            self.status_note.setText("資料已載入。")
         finally:
             self._selection_guard = False
 
@@ -324,7 +352,7 @@ class TranslationWindow(QMainWindow):
             or author_cn != str(record.get("author", {}).get("cn", "")).strip()
             or content_cn != str(record.get("content", {}).get("cn", "")).strip()
         )
-        self.status_note.setText("Unsaved changes." if self._dirty else "All changes saved.")
+        self.status_note.setText("有未保存變更。" if self._dirty else "目前內容已儲存。")
 
     def _confirm_discard(self) -> bool:
         if not self._dirty:
@@ -332,11 +360,11 @@ class TranslationWindow(QMainWindow):
 
         message_box = QMessageBox(self)
         message_box.setIcon(QMessageBox.Warning)
-        message_box.setWindowTitle("Unsaved changes")
-        message_box.setText("The current translation has unsaved changes.")
-        save_button = message_box.addButton("Save", QMessageBox.AcceptRole)
-        discard_button = message_box.addButton("Discard", QMessageBox.DestructiveRole)
-        cancel_button = message_box.addButton("Cancel", QMessageBox.RejectRole)
+        message_box.setWindowTitle("未保存變更")
+        message_box.setText("目前翻譯內容尚未保存。")
+        save_button = message_box.addButton("儲存", QMessageBox.AcceptRole)
+        discard_button = message_box.addButton("放棄變更", QMessageBox.DestructiveRole)
+        cancel_button = message_box.addButton("取消", QMessageBox.RejectRole)
         message_box.exec()
 
         clicked = message_box.clickedButton()
@@ -389,15 +417,15 @@ class TranslationWindow(QMainWindow):
                 content_cn=self.content_cn_edit.toPlainText(),
             )
         except TranslationRepositoryError as error:
-            QMessageBox.warning(self, "Unable to save", str(error))
+            QMessageBox.warning(self, "無法儲存翻譯", str(error))
             return False
 
         self._dirty = False
         self._populate_entry(updated_entry)
         self._refresh_results()
-        self.status_note.setText("Translation saved.")
+        self.status_note.setText("翻譯已儲存。")
         if show_message:
-            QMessageBox.information(self, "Saved", "Translation saved successfully.")
+            QMessageBox.information(self, "已儲存", "翻譯已成功儲存。")
         return True
 
     def _random_pick(self) -> None:
@@ -411,8 +439,8 @@ class TranslationWindow(QMainWindow):
         if entry is None:
             QMessageBox.information(
                 self,
-                "No matching record",
-                "No record matches the current random-pick filters.",
+                "沒有符合條件的資料",
+                "目前隨機抽取條件下沒有可用資料。",
             )
             return
 
@@ -423,7 +451,7 @@ class TranslationWindow(QMainWindow):
             if isinstance(candidate, ArchiveEntry) and candidate.signature == entry.signature:
                 self.results_list.setCurrentRow(row)
                 self.results_list.scrollToItem(self.results_list.item(row))
-                self.status_note.setText("Random record selected.")
+                self.status_note.setText("已隨機選取一筆資料。")
                 return
 
     def closeEvent(self, event: Any) -> None:  # noqa: N802
@@ -438,3 +466,7 @@ def main() -> int:
     window = TranslationWindow()
     window.show()
     return app.exec()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

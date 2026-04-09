@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover - handled by skip
     QApplication = None
 
 from verse_archive_toolkit.settings_store import SettingsStore
+from verse_archive_toolkit.settings import AppSettings
 
 
 @unittest.skipIf(QApplication is None, "PySide6 is not available")
@@ -32,7 +33,7 @@ class GuiSmokeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             window = BuilderMainWindow(SettingsStore(Path(tmp_dir)))
-            self.assertEqual(window.windowTitle(), "Verse Archive Toolkit")
+            self.assertEqual(window.windowTitle(), "Verse Archive Toolkit 建庫工具")
             window.close()
 
     def test_translation_window_starts(self) -> None:
@@ -46,7 +47,25 @@ class GuiSmokeTests(unittest.TestCase):
             settings.translation.data_dir = str(output_dir)
             store.save(settings)
             window = TranslationWindow(store)
-            self.assertEqual(window.windowTitle(), "Verse Archive Toolkit Translator")
+            self.assertEqual(window.windowTitle(), "Verse Archive Toolkit 翻譯輔助工具")
+            window.close()
+
+    def test_filter_action_rule_round_trip_uses_combo_data(self) -> None:
+        from verse_archive_toolkit.gui.builder_app import BuilderMainWindow
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store = SettingsStore(Path(tmp_dir))
+            settings = AppSettings()
+            settings.filters.quotes.text_length.action = "reject"
+            settings.filters.poetry.keyword_blacklist.action = "accept"
+            store.save(settings)
+
+            window = BuilderMainWindow(store)
+            self.assertEqual(window.filter_editor.quote_editor.text_length.get_rule().action, "reject")
+            self.assertEqual(
+                window.filter_editor.poetry_editor.keyword_blacklist.get_rule().action,
+                "accept",
+            )
             window.close()
 
 

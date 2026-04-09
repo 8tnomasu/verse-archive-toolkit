@@ -172,9 +172,9 @@ def build_poem_archive(
 
     _log(
         hooks,
-        f"[poems] loaded {len(poems)} accepted items and {len(review_items)} review items.",
+        f"[英文詩] 已載入 {len(poems)} 筆通過資料與 {len(review_items)} 筆待審資料。",
     )
-    _emit_progress(hooks, state, "Poetry archive ready.")
+    _emit_progress(hooks, state, "英文詩資料庫已就緒。")
 
     if config.poem_target <= 0 or len(poems) >= config.poem_target:
         return _finalize_result(state, config.poems_file, config.poems_review_file)
@@ -185,8 +185,8 @@ def build_poem_archive(
     while len(poems) < config.poem_target:
         if not _should_continue(hooks):
             _save_progress(poems, review_items, config.poems_file, config.poems_review_file)
-            _log(hooks, "[poems] cancellation requested.")
-            _emit_progress(hooks, state, "Poetry build cancelled.", done=True, cancelled=True)
+            _log(hooks, "[英文詩] 已收到取消要求。")
+            _emit_progress(hooks, state, "英文詩建庫已取消。", done=True, cancelled=True)
             return _finalize_result(
                 state,
                 config.poems_file,
@@ -204,7 +204,7 @@ def build_poem_archive(
 
         if not isinstance(payload, list):
             state.reason_counts["poems.invalid_payload"] += 1
-            _log(hooks, "[poems] unexpected PoetryDB payload, retrying.")
+            _log(hooks, "[英文詩] PoetryDB 回傳格式異常，準備重試。")
             if not _interruptible_sleep(1, hooks):
                 continue
             continue
@@ -262,21 +262,21 @@ def build_poem_archive(
                 _save_progress(poems, review_items, config.poems_file, config.poems_review_file)
                 _log(
                     hooks,
-                    f"[poems] checkpoint saved ({len(poems)} accepted / "
-                    f"{len(review_items)} review / {state.rejected_count} rejected).",
+                    f"[英文詩] 已儲存檢查點（通過 {len(poems)} / "
+                    f"待審 {len(review_items)} / 拒絕 {state.rejected_count}）。",
                 )
                 added_since_save = 0
 
             _emit_progress(
                 hooks,
                 state,
-                f"Poetry progress: {len(poems)}/{config.poem_target} accepted",
+                f"英文詩進度：已通過 {len(poems)} / {config.poem_target}",
             )
 
         _emit_progress(
             hooks,
             state,
-            f"Poetry progress: {len(poems)}/{config.poem_target} accepted",
+            f"英文詩進度：已通過 {len(poems)} / {config.poem_target}",
         )
         if not _interruptible_sleep(0.5, hooks):
             continue
@@ -284,10 +284,10 @@ def build_poem_archive(
     _save_progress(poems, review_items, config.poems_file, config.poems_review_file)
     _log(
         hooks,
-        f"[poems] completed with {len(poems)} accepted / {len(review_items)} review / "
-        f"{state.rejected_count} rejected.",
+        f"[英文詩] 已完成，通過 {len(poems)} / 待審 {len(review_items)} / "
+        f"拒絕 {state.rejected_count}。",
     )
-    _emit_progress(hooks, state, "Poetry build completed.", done=True)
+    _emit_progress(hooks, state, "英文詩建庫已完成。", done=True)
     return _finalize_result(state, config.poems_file, config.poems_review_file)
 
 
@@ -338,21 +338,21 @@ def build_quote_archive(
 
     _log(
         hooks,
-        f"[quotes] loaded {len(quotes)} accepted items and {len(review_items)} review items.",
+        f"[哲思語錄] 已載入 {len(quotes)} 筆通過資料與 {len(review_items)} 筆待審資料。",
     )
-    _emit_progress(hooks, state, "Quotes archive ready.")
+    _emit_progress(hooks, state, "哲思語錄資料庫已就緒。")
 
     if config.quote_target <= 0 or len(quotes) >= config.quote_target:
         return _finalize_result(state, config.quotes_file, config.quotes_review_file)
 
     if not config.zenquotes_api_key:
         raise ValueError(
-            "ZENQUOTES_API_KEY is required for the quotes source. "
-            "Set it in the environment, local settings, or pass --zenquotes-api-key."
+            "抓取哲思語錄時需要 ZenQuotes API 金鑰。"
+            "請在環境變數、本機設定，或 CLI 的 --zenquotes-api-key 中提供。"
         )
 
     authors = _fetch_zenquotes_authors(config)
-    _log(hooks, f"[quotes] fetched {len(authors)} author tags from ZenQuotes.")
+    _log(hooks, f"[哲思語錄] 已從 ZenQuotes 取得 {len(authors)} 組作者標籤。")
     added_since_save = 0
 
     for index, author in enumerate(authors, start=1):
@@ -361,8 +361,8 @@ def build_quote_archive(
 
         if not _should_continue(hooks):
             _save_progress(quotes, review_items, config.quotes_file, config.quotes_review_file)
-            _log(hooks, "[quotes] cancellation requested.")
-            _emit_progress(hooks, state, "Quotes build cancelled.", done=True, cancelled=True)
+            _log(hooks, "[哲思語錄] 已收到取消要求。")
+            _emit_progress(hooks, state, "哲思語錄建庫已取消。", done=True, cancelled=True)
             return _finalize_result(
                 state,
                 config.quotes_file,
@@ -381,7 +381,7 @@ def build_quote_archive(
             payload = _fetch_zenquotes_quotes_by_author(author_tag, config)
         except Exception as error:
             state.reason_counts["quotes.author_fetch_error"] += 1
-            _log(hooks, f"[quotes] failed to fetch {display_name or author_tag}: {error}")
+            _log(hooks, f"[哲思語錄] 抓取 {display_name or author_tag} 失敗：{error}")
             if not _interruptible_sleep(config.zenquotes_request_interval, hooks):
                 continue
             continue
@@ -439,23 +439,23 @@ def build_quote_archive(
                 _save_progress(quotes, review_items, config.quotes_file, config.quotes_review_file)
                 _log(
                     hooks,
-                    f"[quotes] checkpoint saved ({len(quotes)} accepted / "
-                    f"{len(review_items)} review / {state.rejected_count} rejected).",
+                    f"[哲思語錄] 已儲存檢查點（通過 {len(quotes)} / "
+                    f"待審 {len(review_items)} / 拒絕 {state.rejected_count}）。",
                 )
                 added_since_save = 0
 
             _emit_progress(
                 hooks,
                 state,
-                f"Quotes progress: {len(quotes)}/{config.quote_target} accepted "
-                f"({index}/{len(authors)} authors)",
+                f"哲思語錄進度：已通過 {len(quotes)} / {config.quote_target} "
+                f"（作者 {index} / {len(authors)}）",
             )
 
         _emit_progress(
             hooks,
             state,
-            f"Quotes progress: {len(quotes)}/{config.quote_target} accepted "
-            f"({index}/{len(authors)} authors)",
+            f"哲思語錄進度：已通過 {len(quotes)} / {config.quote_target} "
+            f"（作者 {index} / {len(authors)}）",
         )
         if not _interruptible_sleep(config.zenquotes_request_interval, hooks):
             continue
@@ -463,10 +463,10 @@ def build_quote_archive(
     _save_progress(quotes, review_items, config.quotes_file, config.quotes_review_file)
     _log(
         hooks,
-        f"[quotes] completed with {len(quotes)} accepted / {len(review_items)} review / "
-        f"{state.rejected_count} rejected.",
+        f"[哲思語錄] 已完成，通過 {len(quotes)} / 待審 {len(review_items)} / "
+        f"拒絕 {state.rejected_count}。",
     )
-    _emit_progress(hooks, state, "Quotes build completed.", done=True)
+    _emit_progress(hooks, state, "哲思語錄建庫已完成。", done=True)
     return _finalize_result(state, config.quotes_file, config.quotes_review_file)
 
 
@@ -485,7 +485,7 @@ def build_selected_sources(
         results["quotes"] = build_quote_archive(config=config, hooks=hooks)
 
     if not results:
-        raise ValueError(f"Unsupported source selection: {source}")
+        raise ValueError(f"不支援的建庫來源：{source}")
 
     return results
 

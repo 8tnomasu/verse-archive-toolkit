@@ -28,8 +28,8 @@ classifiers = [
 verse-archive = "verse_archive_toolkit.cli:main"
 
 [project.gui-scripts]
-verse-archive-gui = "verse_archive_toolkit.gui.builder_app:main"
-verse-archive-translator = "verse_archive_toolkit.gui.translator_app:main"
+verse-archive-gui = "verse_archive_toolkit.builder_gui_entry:main"
+verse-archive-translator = "verse_archive_toolkit.translator_gui_entry:main"
 
 [project.optional-dependencies]
 packaging = [

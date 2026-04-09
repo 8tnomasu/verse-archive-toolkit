@@ -109,7 +109,7 @@ class TranslationRepository:
     def load(self) -> None:
         self.documents.clear()
         if not self.data_dir.exists():
-            raise TranslationRepositoryError(f"Data directory does not exist: {self.data_dir}")
+            raise TranslationRepositoryError(f"資料目錄不存在：{self.data_dir}")
 
         candidate_paths: list[Path] = []
         for filename in STANDARD_ARCHIVE_FILES:
@@ -204,6 +204,8 @@ class TranslationRepository:
                 continue
             if translation_filter == "partial" and state != "partial":
                 continue
+            if translation_filter == "translated" and state != "translated":
+                continue
 
             filtered.append(entry)
 
@@ -225,16 +227,16 @@ class TranslationRepository:
             None,
         )
         if target_document is None:
-            raise TranslationRepositoryError(f"Document not loaded: {entry.file_path}")
+            raise TranslationRepositoryError(f"檔案尚未載入：{entry.file_path}")
 
         current_mtime_ns = entry.file_path.stat().st_mtime_ns
         if current_mtime_ns != entry.mtime_ns:
             raise TranslationRepositoryError(
-                f"Archive file changed on disk, reload before saving: {entry.file_path}"
+                f"檔案已被外部修改，請重新載入後再儲存：{entry.file_path}"
             )
 
         if entry.index >= len(target_document.records):
-            raise TranslationRepositoryError("Selected record index is out of range.")
+            raise TranslationRepositoryError("所選資料索引超出範圍。")
 
         current_record = target_document.records[entry.index]
         current_signature = ArchiveEntry(
@@ -244,7 +246,7 @@ class TranslationRepository:
             mtime_ns=current_mtime_ns,
         ).signature
         if current_signature != entry.signature:
-            raise TranslationRepositoryError("Selected record changed on disk, reload before saving.")
+            raise TranslationRepositoryError("所選資料已被外部修改，請重新載入後再儲存。")
 
         updated_record = deepcopy(current_record)
         updated_record.setdefault("title", {})

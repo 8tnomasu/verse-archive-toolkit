@@ -145,7 +145,7 @@ def normalize_text_list(values: Any) -> list[str]:
 def mask_secret(secret: str, unmasked: int = 4) -> str:
     clean = secret.strip()
     if not clean:
-        return "(not set)"
+        return "（未設定）"
     if len(clean) <= unmasked * 2:
         return "*" * len(clean)
     return f"{clean[:unmasked]}{'*' * (len(clean) - (unmasked * 2))}{clean[-unmasked:]}"

@@ -1,22 +1,23 @@
 # Verse Archive Toolkit
 
-`Verse Archive Toolkit` 是一套以 Python 製作的桌面與 CLI 工具，目標是幫你建立、過濾、人工翻譯與維護詩作 / 哲思語錄資料庫。
+`Verse Archive Toolkit` 是一套以 Python 製作的桌面與 CLI 工具，用來抓取、過濾、建庫、人工翻譯與維護英文詩 / 哲思語錄資料。
 
-目前專案包含兩個主要桌面 GUI：
+目前專案包含兩個正式桌面 GUI，介面已全面繁體中文化：
 
 - 主程式 GUI：抓取資料、建庫、調整過濾規則、查看進度與摘要
-- 翻譯輔助 GUI：搜尋既有 JSON 資料、編輯 `title.cn` / `author.cn` / `content.cn`、保存人工翻譯
+- 翻譯輔助 GUI：搜尋既有 JSON、編輯 `title.cn` / `author.cn` / `content.cn`、保存人工翻譯
 
-同時也保留第一階段整理好的 CLI 與核心模組，方便自動化或批次處理。
+同時保留 CLI 與核心模組，方便批次工作、測試與後續擴充。
 
 ## 主要功能
 
-- 使用 `PySide6` 提供正式桌面 GUI，而不是 Web 介面
-- PoetryDB / ZenQuotes 抓取流程可在背景執行，不阻塞 GUI
-- 過濾規則已從寫死常數重構為可編輯、可保存、可還原預設值的設定模型
-- 過濾規則支援 `accept` / `review` / `reject` 三種處理方式
-- 本機設定使用 `platformdirs` 存放於使用者設定目錄，不寫入 Git
-- 翻譯工具支援全文搜尋、未保存變更提示、上一筆 / 下一筆、隨機抽取未翻譯項目
+- 使用 `PySide6` 提供 Windows 桌面 GUI
+- PoetryDB / ZenQuotes 抓取流程採背景執行，不阻塞 GUI
+- 過濾規則可在 GUI 直接編輯、保存、還原預設值
+- 過濾規則支援 `accept` / `review` / `reject`
+- 本機設定使用 `platformdirs` 存放在使用者目錄，不寫入 Git
+- 啟動時若發生例外，會寫入本機 log，避免 EXE 靜默失敗
+- 翻譯工具支援全文搜尋、上一筆 / 下一筆、未保存變更提示、隨機抽取未翻譯資料
 - CLI 仍可使用 `build`、`stats`、`gui`、`translator`、`settings-path`
 
 ## 安裝
@@ -28,7 +29,7 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-如果要準備打包：
+若要準備 PyInstaller 打包：
 
 ```bash
 python -m pip install -e .[packaging]
@@ -72,7 +73,7 @@ verse-archive build --source all --poem-target 500 --quote-target 500
 verse-archive stats
 ```
 
-列出本機設定檔位置：
+查詢本機設定檔位置：
 
 ```bash
 verse-archive settings-path
@@ -80,177 +81,233 @@ verse-archive settings-path
 
 ## 主程式 GUI 說明
 
-主程式 GUI 用於建立資料庫，包含以下能力：
+主程式 GUI 用於建立資料庫，主要功能如下：
 
-- 輸入並保存 ZenQuotes API key
-- 選擇輸出資料夾
-- 設定 poem / quote target、batch size、request interval、auto save every、timeout、retries
-- 啟動背景抓取與建庫
-- 中途取消
-- 顯示 accepted / review / rejected / skipped / processed 統計
-- 顯示日誌與完成摘要
-- 開啟翻譯輔助 GUI
+- 輸入並保存 `ZenQuotes API 金鑰`
+- 設定輸出資料夾
+- 設定英文詩目標數量
+- 設定哲思句目標數量
+- 設定每批抓取筆數
+- 設定請求間隔、逾時、最大重試次數
+- 設定每幾筆自動儲存
+- 顯示進度條、目前狀態、已通過 / 待審 / 已拒絕 / 已略過 / 本次已處理
+- 顯示建庫日誌與完成摘要
+- 可直接開啟翻譯輔助 GUI
 
-### API key 顯示與保存
+### API 金鑰保存與遮罩
 
-- API key 只保存在本機設定檔，不會提交到 Git
-- GUI 中以遮罩方式顯示，不會完整印到日誌
-- 若 CLI 另外傳入 `--zenquotes-api-key` 或 shell 中設定 `ZENQUOTES_API_KEY`，會優先使用外部提供值
+- API 金鑰只會保存在本機設定檔，不會寫入 Git 倉庫
+- GUI 中只顯示遮罩後內容，不會把完整金鑰寫入日誌
+- 若使用 CLI，也可以改用 `--zenquotes-api-key` 或環境變數 `ZENQUOTES_API_KEY`
 
 ## 翻譯輔助 GUI 說明
 
-翻譯工具面向人工校對與補翻：
+翻譯輔助 GUI 用於人工翻譯既有 JSON：
 
 - 可搜尋 `author.en`、`title.en`、`content.en`、`content.lines`
-- 左側結果列表可快速定位資料
-- 右側可編輯 `title.cn`、`author.cn`、`content.cn`
-- 保存時會寫回正確 JSON 檔案與欄位
-- 詩作的 `content.lines` 不會被破壞
-- 若檔案在磁碟上被其他程式改動，保存時會先阻止覆寫
-- 切換項目前若有未保存修改，會要求你選擇保存 / 捨棄 / 取消
-- 可隨機抽取：
-  - 全部資料
-  - 只抽英文詩
-  - 只抽哲學句
-  - 只抽完全未翻譯
-  - 只抽部分未翻譯
+- 可依類型篩選英文詩 / 哲思語錄
+- 可查看總筆數、已完成翻譯、部分翻譯、未翻譯
+- 可編輯 `title.cn`、`author.cn`、`content.cn`
+- 保存時會保留原始 `content.lines`
+- 支援上一筆 / 下一筆
+- 支援隨機抽取未翻譯、部分翻譯或已完成翻譯資料
+- 有未保存變更提示與覆寫保護
 
-## 過濾規則設定
+## 過濾規則說明
 
-主程式 GUI 的 `Filter Rules` 頁籤會直接影響實際 builder 流程。設定內容包含：
+主程式 GUI 的「過濾規則」分頁會直接影響建庫流程：
 
-- Quotes filters
-  - 文字長度範圍
-  - phrase blacklist
-  - soup-word blacklist
-  - philosophy hints
-  - 驚嘆號限制
-- Poetry filters
+- 哲思語錄規則
+  - 語錄字數範圍
+  - 黑名單片語
+  - 心靈雞湯關鍵字
+  - 哲思提示詞
+  - 驚嘆號上限
+- 英文詩規則
   - 行數範圍
   - 全文字數範圍
-  - 平均每行長度下限
+  - 平均每行字數下限
   - 唯一行比例下限
-  - title / author / content 關鍵字排除
+  - 標題 / 作者 / 內容排除關鍵字
 
-每個規則群組都可：
+每條規則都可：
 
 - 啟用 / 停用
-- 選擇 `accept` / `review` / `reject`
-- 編輯數值與關鍵字清單
+- 指定命中後 `accept` / `review` / `reject`
+- 保存到本機設定檔
 - 一鍵還原預設值
 
-### 0 代表不設限
+### `0 = 不設限`
 
-GUI 與實作目前對下列類型支援 `0 = 不設限`：
+GUI 中數值型規則都支援 `0 = 不設限`，包含：
 
 - 最小值
 - 最大值
 - 行數上下限
-- 長度上下限
+- 字數上下限
 - 驚嘆號上限
-- 最低平均長度
-- 最低唯一行比例
+- 其他數值門檻
 
-也就是說，如果某個最小 / 最大型規則填 `0`，builder 會把該方向視為不限制。
+## 設定檔、日誌與輸出位置
 
-## 設定檔位置
+### 設定檔
 
-本機設定檔不放在 repo 中，而是放在使用者設定目錄。
-
-Windows 預設位置通常會是：
+Windows 預設位於：
 
 ```text
 %APPDATA%\8tnomasu\Verse Archive Toolkit\settings.json
 ```
 
-設定內容包含：
+本機設定檔包含：
 
-- 儲存的 ZenQuotes API key
-- 上次使用的輸出資料夾與建庫參數
-- GUI 可編輯的 filter settings
-- 翻譯工具上次使用的資料夾
+- ZenQuotes API 金鑰
+- 主程式 GUI 最後一次使用的輸出路徑與建庫參數
+- 過濾規則設定
+- 翻譯輔助 GUI 最後一次使用的資料目錄
 
-若設定檔損毀，程式會回退到預設值，並保留一份 `.corrupt-時間戳記.json` 備份。
+若設定檔損毀，程式會自動回退到預設值，並保留一份 `.corrupt-時間戳.json` 備份。
 
-## 輸出資料
+### 啟動日誌
 
-預設輸出資料夾為：
+Windows 預設位於：
 
 ```text
-output/
+%LOCALAPPDATA%\8tnomasu\Verse Archive Toolkit\Logs\
 ```
 
-會產生的主要檔案為：
+主程式與翻譯工具都會各自建立啟動 log，例如：
+
+```text
+builder-gui-20260409-153000.log
+translator-gui-20260409-153100.log
+```
+
+如果 EXE 啟動失敗、雙擊後沒有畫面，請優先檢查這個目錄。
+
+### 輸出資料
+
+若未在 GUI 另外指定，預設會輸出到目前工作目錄下的：
+
+```text
+output\
+```
+
+常見輸出檔案：
 
 - `english_poems.json`
 - `english_poems_review.json`
 - `philosophy_quotes.json`
 - `philosophy_quotes_review.json`
 
-`accept` 會寫入正式資料，`review` 會寫入待審資料，`reject` 只計入統計，不額外輸出檔案。
+建議在 GUI 中指定固定資料夾，避免 EXE 由不同工作目錄啟動時把資料散落到不同位置。
 
-## 打包成 Windows EXE
+## Windows 打包
 
-專案已補上基本 PyInstaller 準備：
+### 為什麼現在改用新的 GUI 入口
 
-- GUI 入口：
-  - `src/verse_archive_toolkit/gui/builder_app.py`
-  - `src/verse_archive_toolkit/gui/translator_app.py`
-- 打包腳本：
-  - `packaging/build-windows.ps1`
-- 基本 spec：
-  - `packaging/verse_archive_toolkit_gui.spec`
+PyInstaller 打包時，必須有明確可執行的 GUI 入口。專案目前已提供：
 
-直接打包範例：
+- `src/verse_archive_toolkit/builder_gui_entry.py`
+- `src/verse_archive_toolkit/translator_gui_entry.py`
+
+這兩個入口會：
+
+- 正確建立 `QApplication`
+- 啟動主視窗
+- 安裝全域例外處理
+- 把啟動錯誤寫入本機 log
+- 在必要時顯示錯誤對話框
+
+### 推薦做法：先打 Debug，再打 Release
+
+Debug 打包：
 
 ```bash
-powershell -ExecutionPolicy Bypass -File .\packaging\build-windows.ps1
+powershell -ExecutionPolicy Bypass -File .\packaging\build-windows-debug.ps1
 ```
 
-或只打主程式 GUI：
+Release 打包：
 
 ```bash
-python -m PyInstaller --clean --noconsole --name VerseArchiveToolkit --paths src --collect-all PySide6 src/verse_archive_toolkit/gui/builder_app.py
+powershell -ExecutionPolicy Bypass -File .\packaging\build-windows-release.ps1
 ```
 
-打包後：
+若只想打某一個工具，可加上 `-Target Builder` 或 `-Target Translator`。
 
-- `dist/` 內會出現 exe
-- 設定檔仍然會寫到使用者設定目錄，不會寫回 repo
-- 輸出 JSON 仍依 GUI / CLI 內設定的輸出資料夾保存
+### Debug 與 Release 的差異
 
-目前尚未放入自訂 icon；若之後加入 icon / assets，請同步更新 PyInstaller 指令或 spec。
+- Debug
+  - 使用 `--console`
+  - 便於從 PowerShell 直接啟動與排錯
+  - 適合先確認 Qt 插件、路徑與啟動流程
+- Release
+  - 使用 `--windowed`
+  - 適合正式交付
+  - 失敗時仍會把例外寫入本機 log，避免完全靜默
 
-## 隱私與安全提醒
+### 建議的排錯方式
 
-- 不要把真實 API key 寫進 `.env.example`、README 或任何 tracked 檔案
-- 不要把本機設定檔提交到 Git
-- 不要把大量抓取結果、暫存檔、build / dist / logs 提交到 repo
-- 翻譯工具保存前會檢查檔案是否被其他程式改過，避免誤覆蓋
+先打 Debug 版，再從 PowerShell 啟動：
 
-## 資料來源、版權與再散布提醒
+```bash
+.\dist\windows\debug\VerseArchiveToolkitDebug\VerseArchiveToolkitDebug.exe --console-log
+```
 
-- PoetryDB、ZenQuotes 與其上游內容各自可能有不同授權或使用限制
-- 請自行確認原始資料來源、作者著作權、API 條款與再散布條件
-- 專案提供的是整理工具與工作流程，不等於自動取得任意文本的再發布權
+若要看 Qt plugin 額外偵錯資訊：
+
+```bash
+.\dist\windows\debug\VerseArchiveToolkitDebug\VerseArchiveToolkitDebug.exe --console-log --debug-qt-plugins
+```
+
+正式版輸出路徑：
+
+```text
+dist\windows\release\VerseArchiveToolkit\
+dist\windows\release\VerseArchiveTranslator\
+```
+
+Debug 版輸出路徑：
+
+```text
+dist\windows\debug\VerseArchiveToolkitDebug\
+dist\windows\debug\VerseArchiveTranslatorDebug\
+```
+
+### Spec 檔
+
+專案也提供 PyInstaller spec：
+
+- `packaging/verse_archive_toolkit_gui.spec`
+- `packaging/verse_archive_translator_gui.spec`
+
+若需要手動調整 PyInstaller 行為，可直接以 spec 為起點。
 
 ## 測試與驗證
 
-目前專案內建的驗證重點包含：
-
-- 核心 filter 規則判定
-- settings save / load / 損毀容錯
-- translation repository 搜尋與保存
-- GUI smoke test（離屏啟動主窗與翻譯窗）
-
-執行方式：
+執行測試：
 
 ```bash
 python -m unittest discover -s tests
 ```
 
-## Repo 備註
+目前測試與驗證重點包含：
 
-- `data/` 目錄中的大型 JSON 仍可保留在本機，但不再由 Git 追蹤
-- CLI 與桌面 GUI 共用同一套核心 builder / filter / settings 結構
-- 若要驗證 live API 抓取，請自行提供有效 ZenQuotes API key 後再從 GUI 或 CLI 執行建庫
+- CLI 基本功能
+- 設定檔保存 / 載入 / 損毀容錯
+- 翻譯 repository 搜尋與保存
+- GUI smoke test
+- GUI 過濾規則 action 下拉選單回填
+- PyInstaller 指令與 Windows Debug / Release 打包流程
+
+## 隱私與安全提醒
+
+- 不要把真實 API 金鑰提交到 Git
+- 不要把本機設定檔提交到 Git
+- 不要把大量抓取結果、建置產物或 log 提交到 repo
+- 建議公開 repo 前再次檢查 `output/`、`dist/`、`build/`、`data/`
+
+## 版權與再散布提醒
+
+- PoetryDB / ZenQuotes 為外部資料來源，請自行確認其使用條款
+- 抓取下來的內容不代表可任意重新散布
+- 若要公開分享資料集、打包程式或翻譯成果，請先確認來源授權與使用範圍

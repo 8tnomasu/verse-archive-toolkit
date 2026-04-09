@@ -13,28 +13,44 @@ from verse_archive_toolkit.settings_store import SettingsStore
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="verse-archive",
-        description="Build curated poetry archives, launch desktop tools, and inspect output stats.",
+        description="建立詩作與哲思語錄資料庫、啟動桌面工具，並檢視目前輸出統計。",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    build_parser = subparsers.add_parser("build", help="Fetch and curate archive data.")
-    build_parser.add_argument("--source", choices=("all", "poems", "quotes"), default=None)
-    build_parser.add_argument("--output-dir", type=Path, default=None)
-    build_parser.add_argument("--poem-target", type=int, default=None)
-    build_parser.add_argument("--quote-target", type=int, default=None)
-    build_parser.add_argument("--poetry-batch-size", type=int, default=None)
-    build_parser.add_argument("--zenquotes-api-key", type=str, default="")
-    build_parser.add_argument("--zenquotes-interval", type=float, default=None)
-    build_parser.add_argument("--save-every", type=int, default=None)
-    build_parser.add_argument("--request-timeout", type=int, default=None)
-    build_parser.add_argument("--max-retries", type=int, default=None)
+    build_parser = subparsers.add_parser("build", help="抓取來源資料並執行建庫。")
+    build_parser.add_argument(
+        "--source",
+        choices=("all", "poems", "quotes"),
+        default=None,
+        help="建庫來源：all=全部、poems=只抓英文詩、quotes=只抓哲思語錄",
+    )
+    build_parser.add_argument("--output-dir", type=Path, default=None, help="輸出資料夾路徑")
+    build_parser.add_argument("--poem-target", type=int, default=None, help="英文詩目標數量")
+    build_parser.add_argument("--quote-target", type=int, default=None, help="哲思語錄目標數量")
+    build_parser.add_argument(
+        "--poetry-batch-size", type=int, default=None, help="每批抓取 PoetryDB 的筆數"
+    )
+    build_parser.add_argument(
+        "--zenquotes-api-key",
+        type=str,
+        default="",
+        help="ZenQuotes API 金鑰；若未提供會改用本機設定或環境變數",
+    )
+    build_parser.add_argument(
+        "--zenquotes-interval", type=float, default=None, help="ZenQuotes 請求間隔（秒）"
+    )
+    build_parser.add_argument("--save-every", type=int, default=None, help="每幾筆自動儲存一次")
+    build_parser.add_argument(
+        "--request-timeout", type=int, default=None, help="HTTP 請求逾時秒數"
+    )
+    build_parser.add_argument("--max-retries", type=int, default=None, help="HTTP 最大重試次數")
 
-    stats_parser = subparsers.add_parser("stats", help="Inspect the current output directory.")
-    stats_parser.add_argument("--output-dir", type=Path, default=None)
+    stats_parser = subparsers.add_parser("stats", help="檢視目前輸出資料夾中的統計。")
+    stats_parser.add_argument("--output-dir", type=Path, default=None, help="要檢查的輸出資料夾")
 
-    subparsers.add_parser("gui", help="Launch the main desktop build GUI.")
-    subparsers.add_parser("translator", help="Launch the translation assistant GUI.")
-    subparsers.add_parser("settings-path", help="Print the local settings file path.")
+    subparsers.add_parser("gui", help="啟動主程式建庫 GUI。")
+    subparsers.add_parser("translator", help="啟動翻譯輔助 GUI。")
+    subparsers.add_parser("settings-path", help="輸出本機設定檔路徑。")
 
     return parser
 
@@ -128,14 +144,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "gui":
-        from verse_archive_toolkit.gui.builder_app import main as gui_main
+        from verse_archive_toolkit.builder_gui_entry import main as gui_main
 
         return gui_main()
 
     if args.command == "translator":
-        from verse_archive_toolkit.gui.translator_app import main as translator_main
+        from verse_archive_toolkit.translator_gui_entry import main as translator_main
 
         return translator_main()
 
-    parser.error(f"Unsupported command: {args.command}")
+    parser.error(f"不支援的指令：{args.command}")
     return 2
