@@ -76,46 +76,76 @@ class GuiSmokeTests(unittest.TestCase):
         from verse_archive_toolkit.gui.builder_app import BuilderMainWindow
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            output_dir = Path(tmp_dir) / "output"
-            store = SettingsStore(Path(tmp_dir) / "settings")
-            settings = store.load()
-            settings.build.output_dir = str(output_dir)
-            store.save(settings)
+            app_root = Path(tmp_dir).resolve()
+            with patch.dict(os.environ, {"VERSE_ARCHIVE_TOOLKIT_HOME": str(app_root)}, clear=False):
+                window = BuilderMainWindow()
+                self.assertEqual(window.settings_path_display.text(), str((app_root / "data" / "settings.json")))
+                self.assertEqual(window.logs_dir_display.text(), str(app_root / "logs"))
+                self.assertEqual(window.output_path_display.text(), str(app_root / "output"))
+                self.assertIn("poems", window._source_widgets)
+                self.assertIn("quotes", window._source_widgets)
+                self.assertTrue(window.build_scroll_area.widgetResizable())
+                self.assertEqual(window.build_splitter.orientation(), Qt.Vertical)
+                self.assertFalse(window.build_scroll_area.isAncestorOf(window.save_settings_button))
+                self.assertFalse(window.build_scroll_area.isAncestorOf(window.start_button))
+                self.assertFalse(window.build_scroll_area.isAncestorOf(window.cancel_button))
+                self.assertFalse(window.build_scroll_area.isAncestorOf(window.copy_recent_log_button))
+                self.assertTrue(window.build_scroll_area.isAncestorOf(window.open_translator_button))
 
-            window = BuilderMainWindow(store)
-            self.assertEqual(window.output_path_display.text(), str(output_dir.resolve()))
-            self.assertIn("poems", window._source_widgets)
-            self.assertIn("quotes", window._source_widgets)
-            self.assertTrue(window.build_scroll_area.widgetResizable())
-            self.assertEqual(window.build_splitter.orientation(), Qt.Vertical)
+                poems_index = window.source_combo.findData("poems")
+                window.source_combo.setCurrentIndex(poems_index)
+                self.assertEqual(window._source_widgets["quotes"].status_label.text(), "本次未啟用")
 
-            poems_index = window.source_combo.findData("poems")
-            window.source_combo.setCurrentIndex(poems_index)
-            self.assertEqual(window._source_widgets["quotes"].status_label.text(), "本次未啟用")
+                button_texts = {button.text() for button in window.findChildren(type(window.start_button))}
+                self.assertNotIn("複製設定檔路徑", button_texts)
+                self.assertNotIn("複製日誌路徑", button_texts)
+                self.assertNotIn("複製輸出路徑", button_texts)
+                self.assertIn("複製最近日誌內容", button_texts)
 
-            button_texts = {button.text() for button in window.findChildren(type(window.start_button))}
-            self.assertNotIn("複製設定檔路徑", button_texts)
-            self.assertNotIn("複製日誌路徑", button_texts)
-            self.assertNotIn("複製輸出路徑", button_texts)
-            self.assertIn("複製最近日誌內容", button_texts)
-
-            window._handle_progress(
-                BuildProgress(
-                    source="poems",
-                    status_text="英文詩進度：已通過 3 / 10",
-                    accepted_count=3,
-                    review_count=1,
-                    rejected_count=0,
-                    skipped_count=2,
-                    processed_count=6,
-                    target_count=10,
-                    reason_counts={},
+                window._handle_progress(
+                    BuildProgress(
+                        source="poems",
+                        status_text="英文詩進度：已通過 3 / 10",
+                        accepted_count=3,
+                        review_count=1,
+                        rejected_count=0,
+                        skipped_count=2,
+                        processed_count=6,
+                        target_count=10,
+                        reason_counts={},
+                    )
                 )
-            )
-            self.assertEqual(window._source_widgets["poems"].accepted_label.text(), "3")
-            self.assertEqual(window._source_widgets["poems"].processed_label.text(), "6")
-            self.assertTrue(window.summary_label.text())
-            window.close()
+                self.assertEqual(window._source_widgets["poems"].accepted_label.text(), "3")
+                self.assertEqual(window._source_widgets["poems"].processed_label.text(), "6")
+                self.assertTrue(window.summary_label.text())
+                window.close()
+
+    def test_start_build_focuses_runtime_panel(self) -> None:
+        from verse_archive_toolkit.gui.builder_app import BuilderMainWindow
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app_root = Path(tmp_dir).resolve()
+            with patch.dict(os.environ, {"VERSE_ARCHIVE_TOOLKIT_HOME": str(app_root)}, clear=False):
+                window = BuilderMainWindow()
+                window.show()
+                self.app.processEvents()
+                window.build_splitter.setSizes([780, 120])
+                self.app.processEvents()
+
+                with (
+                    patch.object(window, "_focus_runtime_panel", wraps=window._focus_runtime_panel) as focus_runtime_panel,
+                    patch("verse_archive_toolkit.gui.builder_app.QThread.start", return_value=None),
+                ):
+                    window._start_build()
+
+                self.app.processEvents()
+                focus_runtime_panel.assert_called_once()
+                self.assertFalse(window.start_button.isEnabled())
+                self.assertTrue(window.cancel_button.isEnabled())
+                self.assertIn("已送出建庫工作。", window.log_output.toPlainText())
+
+                window._cleanup_thread()
+                window.close()
 
     def test_copy_recent_log_content_uses_current_session_log(self) -> None:
         from verse_archive_toolkit.gui.builder_app import BuilderMainWindow

@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from verse_archive_toolkit.app_paths import resolve_output_directory, serialize_app_relative_path
 from verse_archive_toolkit.settings_store import SettingsStore
 from verse_archive_toolkit.translator import (
     ArchiveEntry,
@@ -66,7 +67,7 @@ class TranslationWindow(QMainWindow):
         self.setWindowTitle("Verse Archive Toolkit 翻譯輔助工具")
         self.resize(1180, 780)
         self._build_ui()
-        self._load_directory(Path(self.settings.translation.data_dir), show_message=False)
+        self._load_directory(resolve_output_directory(self.settings.translation.data_dir), show_message=False)
         self._apply_style()
 
     def _apply_style(self) -> None:
@@ -219,18 +220,19 @@ class TranslationWindow(QMainWindow):
         selected = QFileDialog.getExistingDirectory(
             self,
             "選擇資料來源目錄",
-            self.data_dir_edit.text().strip() or str(Path.cwd()),
+            str(resolve_output_directory(self.data_dir_edit.text().strip() or "output")),
         )
         if not selected:
             return
         self._load_directory(Path(selected))
 
     def _reload_repository(self) -> None:
-        self._load_directory(Path(self.data_dir_edit.text().strip() or "output"))
+        self._load_directory(resolve_output_directory(self.data_dir_edit.text().strip() or "output"))
 
     def _load_directory(self, directory: Path, *, show_message: bool = True) -> None:
-        self.data_dir_edit.setText(str(directory))
-        self.repository = TranslationRepository(directory)
+        resolved_directory = resolve_output_directory(directory)
+        self.data_dir_edit.setText(serialize_app_relative_path(resolved_directory))
+        self.repository = TranslationRepository(resolved_directory)
         try:
             self.repository.load()
         except TranslationRepositoryError as error:
@@ -243,10 +245,10 @@ class TranslationWindow(QMainWindow):
             self.status_note.setText("找不到可用資料來源，請先選擇資料夾。")
             return
 
-        self.settings.translation.data_dir = str(directory)
+        self.settings.translation.data_dir = serialize_app_relative_path(resolved_directory)
         self.settings_store.save(self.settings)
         self._refresh_results()
-        self.status_note.setText(f"已載入資料來源目錄：{directory}")
+        self.status_note.setText(f"已載入資料來源目錄：{resolved_directory}")
 
     def _update_stats(self) -> None:
         if self.repository is None:

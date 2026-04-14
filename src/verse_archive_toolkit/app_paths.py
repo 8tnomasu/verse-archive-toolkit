@@ -5,17 +5,43 @@ import subprocess
 import sys
 from pathlib import Path
 
-from platformdirs import user_config_dir, user_log_dir
 
-from verse_archive_toolkit.settings import APP_NAME, DEFAULT_OUTPUT_DIR, SETTINGS_FILENAME
-
+APP_NAME = "Verse Archive Toolkit"
+SETTINGS_FILENAME = "settings.json"
+DEFAULT_OUTPUT_DIRNAME = "output"
 DEFAULT_LOG_TAIL_LINES = 200
 
 
-def get_settings_directory() -> Path:
-    path = Path(user_config_dir(APP_NAME, appauthor=False, roaming=True))
+def get_application_directory() -> Path:
+    override = os.getenv("VERSE_ARCHIVE_TOOLKIT_HOME", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+
+    module_path = Path(__file__).resolve()
+    for candidate in [module_path.parent.parent.parent, Path.cwd().resolve()]:
+        candidate = candidate.resolve()
+        if (candidate / "pyproject.toml").exists() and (candidate / "src" / "verse_archive_toolkit").exists():
+            return candidate
+
+    if sys.argv and sys.argv[0]:
+        argv_path = Path(sys.argv[0]).expanduser()
+        if argv_path.exists():
+            return argv_path.resolve().parent
+
+    return Path.cwd().resolve()
+
+
+def get_data_directory() -> Path:
+    path = get_application_directory() / "data"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def get_settings_directory() -> Path:
+    return get_data_directory()
 
 
 def get_settings_path() -> Path:
@@ -23,15 +49,46 @@ def get_settings_path() -> Path:
 
 
 def get_logs_directory() -> Path:
-    path = Path(user_log_dir(APP_NAME, appauthor=False))
+    path = get_application_directory() / "logs"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_default_output_directory() -> Path:
+    path = get_application_directory() / DEFAULT_OUTPUT_DIRNAME
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def resolve_output_directory(raw_path: str | Path | None) -> Path:
     candidate = str(raw_path or "").strip()
-    base_path = Path(candidate) if candidate else Path(DEFAULT_OUTPUT_DIR)
-    return base_path.expanduser().resolve()
+    if not candidate:
+        return get_default_output_directory()
+
+    base_path = Path(candidate).expanduser()
+    if base_path.is_absolute():
+        return base_path.resolve()
+
+    return (get_application_directory() / base_path).resolve()
+
+
+def serialize_app_relative_path(raw_path: str | Path) -> str:
+    candidate = str(raw_path).strip()
+    if not candidate:
+        return ""
+
+    path = Path(candidate).expanduser()
+    if not path.is_absolute():
+        return str(path)
+
+    resolved = path.resolve()
+    app_root = get_application_directory()
+    try:
+        relative = resolved.relative_to(app_root)
+    except ValueError:
+        return str(resolved)
+
+    return str(relative) if str(relative) else "."
 
 
 def find_latest_log_path(app_slug: str | None = None) -> Path | None:

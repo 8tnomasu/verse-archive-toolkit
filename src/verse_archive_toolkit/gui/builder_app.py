@@ -37,6 +37,7 @@ from verse_archive_toolkit.app_paths import (
     open_path_location,
     read_log_tail,
     resolve_output_directory,
+    serialize_app_relative_path,
     tail_text,
 )
 from verse_archive_toolkit.builder import BuildHooks, BuildProgress, BuildResult, build_selected_sources
@@ -432,7 +433,7 @@ class BuilderMainWindow(QMainWindow):
         main_layout.addWidget(tabs)
 
         footer = QLabel(
-            "本機設定檔與啟動日誌會存放在使用者目錄，不會寫回 Git 倉庫；路徑與診斷區可直接開啟相關位置，並一鍵複製最近日誌內容。API key 只在本機保存，介面中只顯示遮罩後內容。"
+            "本機設定檔、日誌與預設輸出會放在工具資料夾內的 data / logs / output，不會寫回 Git 倉庫；路徑與診斷區可直接開啟相關位置，並一鍵複製最近日誌內容。API key 只在本機保存，介面中只顯示遮罩後內容。"
         )
         footer.setWordWrap(True)
         footer.setStyleSheet("color: #555;")
@@ -558,7 +559,22 @@ class BuilderMainWindow(QMainWindow):
         form.addRow("最大重試次數", self.max_retries_spin)
         top_layout.addWidget(config_group)
 
-        button_row = QHBoxLayout()
+        top_layout.addWidget(self._create_paths_group())
+        utility_row = QHBoxLayout()
+        self.open_translator_button = QPushButton("開啟翻譯工具")
+        self.open_translator_button.clicked.connect(self._open_translator_window)
+        utility_row.addStretch(1)
+        utility_row.addWidget(self.open_translator_button)
+        top_layout.addLayout(utility_row)
+        top_layout.addStretch(1)
+
+        self.build_scroll_area.setWidget(top_content)
+
+        self.runtime_panel = QWidget()
+        runtime_layout = QVBoxLayout(self.runtime_panel)
+        runtime_layout.setContentsMargins(0, 0, 0, 0)
+
+        action_row = QHBoxLayout()
         self.save_settings_button = QPushButton("儲存設定")
         self.save_settings_button.clicked.connect(self._save_settings)
         self.start_button = QPushButton("開始建庫")
@@ -566,17 +582,15 @@ class BuilderMainWindow(QMainWindow):
         self.cancel_button = QPushButton("停止 / 取消")
         self.cancel_button.clicked.connect(self._cancel_build)
         self.cancel_button.setEnabled(False)
-        self.open_translator_button = QPushButton("開啟翻譯工具")
-        self.open_translator_button.clicked.connect(self._open_translator_window)
+        self.copy_recent_log_button = QPushButton("複製最近日誌內容")
+        self.copy_recent_log_button.clicked.connect(self._copy_recent_log_content)
 
-        button_row.addWidget(self.save_settings_button)
-        button_row.addWidget(self.start_button)
-        button_row.addWidget(self.cancel_button)
-        button_row.addStretch(1)
-        button_row.addWidget(self.open_translator_button)
-        top_layout.addLayout(button_row)
-
-        top_layout.addWidget(self._create_paths_group())
+        action_row.addWidget(self.save_settings_button)
+        action_row.addWidget(self.start_button)
+        action_row.addWidget(self.cancel_button)
+        action_row.addStretch(1)
+        action_row.addWidget(self.copy_recent_log_button)
+        runtime_layout.addLayout(action_row)
 
         progress_group = QGroupBox("執行狀態")
         progress_layout = QVBoxLayout(progress_group)
@@ -611,10 +625,7 @@ class BuilderMainWindow(QMainWindow):
         progress_layout.addLayout(source_grid)
         progress_layout.addWidget(QLabel("全域摘要"))
         progress_layout.addLayout(stats_grid)
-        top_layout.addWidget(progress_group)
-        top_layout.addStretch(1)
-
-        self.build_scroll_area.setWidget(top_content)
+        runtime_layout.addWidget(progress_group)
 
         log_group = QGroupBox("建庫摘要與日誌")
         log_layout = QVBoxLayout(log_group)
@@ -631,12 +642,13 @@ class BuilderMainWindow(QMainWindow):
         log_layout.addWidget(self.summary_label)
         log_layout.addWidget(QLabel("日誌輸出"))
         log_layout.addWidget(self.log_output, 1)
+        runtime_layout.addWidget(log_group, 1)
 
         self.build_splitter.addWidget(self.build_scroll_area)
-        self.build_splitter.addWidget(log_group)
-        self.build_splitter.setStretchFactor(0, 3)
-        self.build_splitter.setStretchFactor(1, 2)
-        self.build_splitter.setSizes([560, 320])
+        self.build_splitter.addWidget(self.runtime_panel)
+        self.build_splitter.setStretchFactor(0, 2)
+        self.build_splitter.setStretchFactor(1, 3)
+        self.build_splitter.setSizes([340, 520])
 
         layout.addWidget(self.build_splitter, 1)
 
@@ -693,8 +705,6 @@ class BuilderMainWindow(QMainWindow):
 
         latest_log_open_button = QPushButton("開啟最近日誌位置")
         latest_log_open_button.clicked.connect(self._open_latest_log_location)
-        self.copy_recent_log_button = QPushButton("複製最近日誌內容")
-        self.copy_recent_log_button.clicked.connect(self._copy_recent_log_content)
 
         output_open_button = QPushButton("開啟輸出資料夾")
         output_open_button.clicked.connect(self._open_output_directory)
@@ -710,7 +720,6 @@ class BuilderMainWindow(QMainWindow):
         layout.addWidget(QLabel("最近啟動日誌"), 2, 0)
         layout.addWidget(self.latest_log_display, 2, 1)
         layout.addWidget(latest_log_open_button, 2, 2)
-        layout.addWidget(self.copy_recent_log_button, 2, 3)
 
         layout.addWidget(QLabel("目前輸出資料夾"), 3, 0)
         layout.addWidget(self.output_path_display, 3, 1)
@@ -905,9 +914,10 @@ class BuilderMainWindow(QMainWindow):
 
     def _collect_settings(self) -> AppSettings:
         settings = self.settings.clone()
+        stored_output_dir = serialize_app_relative_path(self._current_output_directory()) or "output"
         settings.zenquotes_api_key = self.api_key_edit.text().strip()
         settings.build = BuildSettings(
-            output_dir=self.output_dir_edit.text().strip() or "output",
+            output_dir=stored_output_dir,
             poem_target=self.poem_target_spin.value(),
             quote_target=self.quote_target_spin.value(),
             poetry_batch_size=self.batch_size_spin.value(),
@@ -917,7 +927,7 @@ class BuilderMainWindow(QMainWindow):
             max_retries=self.max_retries_spin.value(),
             source=str(self.source_combo.currentData()),
         )
-        settings.translation.data_dir = settings.build.output_dir
+        settings.translation.data_dir = stored_output_dir
         settings.filters = self.filter_editor.get_settings()
         return settings.normalized()
 
@@ -931,11 +941,26 @@ class BuilderMainWindow(QMainWindow):
         selected = QFileDialog.getExistingDirectory(
             self,
             "選擇輸出資料夾",
-            self.output_dir_edit.text().strip() or str(Path.cwd()),
+            str(self._current_output_directory()),
         )
         if selected:
-            self.output_dir_edit.setText(selected)
+            self.output_dir_edit.setText(serialize_app_relative_path(selected))
             self._refresh_path_views()
+
+    def _focus_runtime_panel(self) -> None:
+        QApplication.processEvents()
+        sizes = self.build_splitter.sizes()
+        total_height = sum(size for size in sizes if size > 0)
+        if total_height <= 0:
+            total_height = max(self.height() - 80, 720)
+
+        minimum_top = 180
+        preferred_bottom = max(int(total_height * 0.6), 360)
+        bottom_height = min(preferred_bottom, max(int(total_height * 0.6), total_height - minimum_top))
+        top_height = max(total_height - bottom_height, minimum_top)
+        self.build_splitter.setSizes([top_height, bottom_height])
+        self.log_output.setFocus(Qt.OtherFocusReason)
+        self.log_output.ensureCursorVisible()
 
     def _append_log(self, message: str) -> None:
         self.log_output.appendPlainText(message)
@@ -971,6 +996,7 @@ class BuilderMainWindow(QMainWindow):
         self._append_log("已送出建庫工作。")
         self._append_log(f"輸出資料夾：{self._current_output_directory()}")
         self._append_log("建庫來源已啟動；若選擇全部來源，英文詩與哲思語錄會並行抓取。")
+        self._focus_runtime_panel()
 
         self._toggle_running_state(True)
         self._thread = QThread(self)

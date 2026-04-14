@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 import sys
+from unittest.mock import patch
 
 
 SRC_DIR = Path(__file__).resolve().parents[1] / "src"
@@ -12,37 +13,46 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from verse_archive_toolkit.app_paths import (
+    get_application_directory,
     get_logs_directory,
-    read_log_tail,
     get_settings_directory,
     get_settings_path,
+    read_log_tail,
     resolve_output_directory,
+    serialize_app_relative_path,
     tail_text,
 )
-from verse_archive_toolkit.settings import APP_NAME
 
 
 class AppPathTests(unittest.TestCase):
-    def test_product_name_based_settings_and_logs_paths(self) -> None:
+    def test_portable_paths_live_under_application_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            root = Path(tmp_dir)
-            config_dir = root / APP_NAME
-            logs_dir = root / APP_NAME / "Logs"
+            app_root = Path(tmp_dir).resolve()
+            with patch.dict(os.environ, {"VERSE_ARCHIVE_TOOLKIT_HOME": str(app_root)}, clear=False):
+                self.assertEqual(get_application_directory(), app_root)
+                self.assertEqual(get_settings_directory(), app_root / "data")
+                self.assertEqual(get_settings_path(), app_root / "data" / "settings.json")
+                self.assertEqual(get_logs_directory(), app_root / "logs")
+                self.assertEqual(resolve_output_directory(None), app_root / "output")
+                self.assertEqual(
+                    resolve_output_directory(Path("output") / "review"),
+                    app_root / "output" / "review",
+                )
+                self.assertTrue(get_settings_path().resolve().is_relative_to(app_root))
+                self.assertTrue(get_logs_directory().resolve().is_relative_to(app_root))
 
-            with (
-                patch("verse_archive_toolkit.app_paths.user_config_dir", return_value=str(config_dir)),
-                patch("verse_archive_toolkit.app_paths.user_log_dir", return_value=str(logs_dir)),
-            ):
-                self.assertEqual(get_settings_directory(), config_dir)
-                self.assertEqual(get_settings_path(), config_dir / "settings.json")
-                self.assertEqual(get_logs_directory(), logs_dir)
-                self.assertNotIn("8tnomasu", str(get_settings_directory()).lower())
-                self.assertNotIn("8tnomasu", str(get_logs_directory()).lower())
+    def test_serialize_app_relative_path_prefers_relative_paths_inside_tool_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app_root = Path(tmp_dir).resolve()
+            external_dir = app_root.parent / "external-output"
+            with patch.dict(os.environ, {"VERSE_ARCHIVE_TOOLKIT_HOME": str(app_root)}, clear=False):
+                stored_output = serialize_app_relative_path(app_root / "output")
+                stored_nested = serialize_app_relative_path(app_root / "output" / "translated")
+                stored_external = serialize_app_relative_path(external_dir)
 
-    def test_resolve_output_directory_returns_absolute_path(self) -> None:
-        resolved = resolve_output_directory("output")
-        self.assertTrue(resolved.is_absolute())
-        self.assertEqual(resolved.name, "output")
+        self.assertEqual(stored_output, "output")
+        self.assertEqual(Path(stored_nested).parts, ("output", "translated"))
+        self.assertEqual(stored_external, str(external_dir.resolve()))
 
     def test_tail_helpers_keep_only_recent_lines(self) -> None:
         text = "\n".join(f"line {index}" for index in range(1, 6))

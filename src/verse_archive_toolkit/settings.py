@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from verse_archive_toolkit.app_paths import resolve_output_directory
+
 
 APP_NAME = "Verse Archive Toolkit"
 SETTINGS_FILENAME = "settings.json"
@@ -432,7 +434,7 @@ def build_runtime_config(
     zenquotes_api_key: str = "",
 ) -> ToolkitConfig:
     return ToolkitConfig(
-        output_dir=Path(build_settings.output_dir),
+        output_dir=resolve_output_directory(build_settings.output_dir),
         poem_target=build_settings.poem_target,
         quote_target=build_settings.quote_target,
         poetry_batch_size=build_settings.poetry_batch_size,

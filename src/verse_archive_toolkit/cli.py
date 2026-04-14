@@ -154,7 +154,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "stats":
-        output_dir = args.output_dir if args.output_dir is not None else Path(settings.build.output_dir)
+        output_dir = resolve_output_directory(
+            args.output_dir if args.output_dir is not None else settings.build.output_dir
+        )
         runtime_config = build_runtime_config(settings.build, settings.filters, settings.zenquotes_api_key)
         runtime_config.output_dir = output_dir
         print(json.dumps(collect_output_stats(runtime_config), indent=2))
