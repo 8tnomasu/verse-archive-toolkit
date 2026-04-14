@@ -79,6 +79,8 @@ class GuiSmokeTests(unittest.TestCase):
             app_root = Path(tmp_dir).resolve()
             with patch.dict(os.environ, {"VERSE_ARCHIVE_TOOLKIT_HOME": str(app_root)}, clear=False):
                 window = BuilderMainWindow()
+                window.show()
+                self.app.processEvents()
                 self.assertEqual(window.settings_path_display.text(), str((app_root / "data" / "settings.json")))
                 self.assertEqual(window.logs_dir_display.text(), str(app_root / "logs"))
                 self.assertEqual(window.output_path_display.text(), str(app_root / "output"))
@@ -86,11 +88,19 @@ class GuiSmokeTests(unittest.TestCase):
                 self.assertIn("quotes", window._source_widgets)
                 self.assertTrue(window.build_scroll_area.widgetResizable())
                 self.assertEqual(window.build_splitter.orientation(), Qt.Vertical)
+                self.assertEqual(window.runtime_splitter.orientation(), Qt.Vertical)
                 self.assertFalse(window.build_scroll_area.isAncestorOf(window.save_settings_button))
                 self.assertFalse(window.build_scroll_area.isAncestorOf(window.start_button))
                 self.assertFalse(window.build_scroll_area.isAncestorOf(window.cancel_button))
                 self.assertFalse(window.build_scroll_area.isAncestorOf(window.copy_recent_log_button))
-                self.assertTrue(window.build_scroll_area.isAncestorOf(window.open_translator_button))
+                self.assertFalse(window.build_scroll_area.isAncestorOf(window.open_translator_button))
+                self.assertTrue(window.runtime_panel.isAncestorOf(window.open_translator_button))
+                build_sizes = window.build_splitter.sizes()
+                runtime_sizes = window.runtime_splitter.sizes()
+                self.assertGreaterEqual(build_sizes[0], window.build_scroll_area.minimumHeight() - 20)
+                self.assertLessEqual(build_sizes[1], window.runtime_panel.minimumHeight() + 20)
+                self.assertLessEqual(runtime_sizes[1], window._log_panel_height_for_lines())
+                self.assertEqual(window.log_output.minimumHeight(), window._log_output_height_for_lines())
 
                 poems_index = window.source_combo.findData("poems")
                 window.source_combo.setCurrentIndex(poems_index)
@@ -118,6 +128,25 @@ class GuiSmokeTests(unittest.TestCase):
                 self.assertEqual(window._source_widgets["poems"].accepted_label.text(), "3")
                 self.assertEqual(window._source_widgets["poems"].processed_label.text(), "6")
                 self.assertTrue(window.summary_label.text())
+                window.close()
+
+    def test_open_translator_button_launches_translation_window(self) -> None:
+        from verse_archive_toolkit.gui.builder_app import BuilderMainWindow
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            app_root = Path(tmp_dir).resolve()
+            with patch.dict(os.environ, {"VERSE_ARCHIVE_TOOLKIT_HOME": str(app_root)}, clear=False):
+                window = BuilderMainWindow()
+                window.show()
+                self.app.processEvents()
+
+                window.open_translator_button.click()
+                self.app.processEvents()
+
+                self.assertIsNotNone(window._translator_window)
+                self.assertEqual(window._translator_window.windowTitle(), "Verse Archive Toolkit 翻譯輔助工具")
+
+                window._translator_window.close()
                 window.close()
 
     def test_start_build_focuses_runtime_panel(self) -> None:
