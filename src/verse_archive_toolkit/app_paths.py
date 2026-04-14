@@ -3,12 +3,13 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from platformdirs import user_config_dir, user_log_dir
 
 from verse_archive_toolkit.settings import APP_NAME, DEFAULT_OUTPUT_DIR, SETTINGS_FILENAME
+
+DEFAULT_LOG_TAIL_LINES = 200
 
 
 def get_settings_directory() -> Path:
@@ -33,21 +34,6 @@ def resolve_output_directory(raw_path: str | Path | None) -> Path:
     return base_path.expanduser().resolve()
 
 
-def get_program_path() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve()
-    if sys.argv and sys.argv[0]:
-        return Path(sys.argv[0]).resolve()
-    return Path.cwd()
-
-
-def get_package_version() -> str:
-    try:
-        return version("verse-archive-toolkit")
-    except PackageNotFoundError:
-        return "開發版本"
-
-
 def find_latest_log_path(app_slug: str | None = None) -> Path | None:
     log_dir = get_logs_directory()
     pattern = f"{app_slug}-*.log" if app_slug else "*.log"
@@ -55,6 +41,17 @@ def find_latest_log_path(app_slug: str | None = None) -> Path | None:
     if not candidates:
         return None
     return max(candidates, key=lambda item: item.stat().st_mtime)
+
+
+def tail_text(text: str, *, max_lines: int = DEFAULT_LOG_TAIL_LINES) -> str:
+    lines = text.splitlines()
+    excerpt = lines[-max_lines:] if max_lines > 0 else lines
+    return "\n".join(excerpt).strip()
+
+
+def read_log_tail(path: Path, *, max_lines: int = DEFAULT_LOG_TAIL_LINES) -> str:
+    content = path.read_text(encoding="utf-8", errors="replace")
+    return tail_text(content, max_lines=max_lines)
 
 
 def open_path_location(path: Path, *, ensure_exists: bool = False) -> Path:
@@ -78,25 +75,3 @@ def open_path_location(path: Path, *, ensure_exists: bool = False) -> Path:
 
     subprocess.Popen(["xdg-open", str(target)])
     return target
-
-
-def build_diagnostic_report(
-    *,
-    output_dir: str | Path | None,
-    settings_path: Path | None = None,
-    app_slug: str | None = None,
-) -> str:
-    resolved_settings_path = (settings_path or get_settings_path()).resolve()
-    resolved_logs_dir = get_logs_directory().resolve()
-    resolved_output_dir = resolve_output_directory(output_dir)
-    latest_log_path = find_latest_log_path(app_slug)
-
-    lines = [
-        f"程式版本：{get_package_version()}",
-        f"執行位置：{get_program_path()}",
-        f"設定檔位置：{resolved_settings_path}",
-        f"日誌資料夾：{resolved_logs_dir}",
-        f"輸出資料夾：{resolved_output_dir}",
-        f"最近啟動日誌：{latest_log_path if latest_log_path is not None else '尚未找到'}",
-    ]
-    return "\n".join(lines)

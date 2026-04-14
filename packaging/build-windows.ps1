@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet("Debug", "Release")]
     [string]$Mode = "Debug",
 
@@ -7,6 +7,19 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = $utf8
+try {
+    [Console]::InputEncoding = $utf8
+    [Console]::OutputEncoding = $utf8
+}
+catch {
+}
+try {
+    chcp 65001 > $null
+}
+catch {
+}
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = (Resolve-Path (Join-Path $scriptDir "..")).Path
@@ -57,7 +70,7 @@ function Invoke-GuiBuild {
 
     $arguments += $resolvedEntry
 
-    Write-Host "開始打包 $Name（模式：$Mode）..." -ForegroundColor Cyan
+    Write-Host "Starting build for $Name (mode: $Mode)..." -ForegroundColor Cyan
     & python @arguments
 }
 
@@ -71,5 +84,5 @@ if ($Target -in @("All", "Translator")) {
     Invoke-GuiBuild -Name $translatorName -EntryScript (Join-Path $srcDir "verse_archive_toolkit\translator_gui_entry.py")
 }
 
-Write-Host "打包完成，輸出目錄：$distRoot" -ForegroundColor Green
+Write-Host "Build completed. Output directory: $distRoot" -ForegroundColor Green
 Write-Host "User config and logs will be stored under the Verse Archive Toolkit folder in the current user's profile." -ForegroundColor DarkGray

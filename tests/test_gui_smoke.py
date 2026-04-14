@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -14,8 +15,10 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 try:
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
 except Exception:  # pragma: no cover - handled by skip
+    Qt = None
     QApplication = None
 
 from verse_archive_toolkit.settings_store import SettingsStore
@@ -83,10 +86,18 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(window.output_path_display.text(), str(output_dir.resolve()))
             self.assertIn("poems", window._source_widgets)
             self.assertIn("quotes", window._source_widgets)
+            self.assertTrue(window.build_scroll_area.widgetResizable())
+            self.assertEqual(window.build_splitter.orientation(), Qt.Vertical)
 
             poems_index = window.source_combo.findData("poems")
             window.source_combo.setCurrentIndex(poems_index)
             self.assertEqual(window._source_widgets["quotes"].status_label.text(), "本次未啟用")
+
+            button_texts = {button.text() for button in window.findChildren(type(window.start_button))}
+            self.assertNotIn("複製設定檔路徑", button_texts)
+            self.assertNotIn("複製日誌路徑", button_texts)
+            self.assertNotIn("複製輸出路徑", button_texts)
+            self.assertIn("複製最近日誌內容", button_texts)
 
             window._handle_progress(
                 BuildProgress(
@@ -104,6 +115,37 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(window._source_widgets["poems"].accepted_label.text(), "3")
             self.assertEqual(window._source_widgets["poems"].processed_label.text(), "6")
             self.assertTrue(window.summary_label.text())
+            window.close()
+
+    def test_copy_recent_log_content_uses_current_session_log(self) -> None:
+        from verse_archive_toolkit.gui.builder_app import BuilderMainWindow
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            window = BuilderMainWindow(SettingsStore(Path(tmp_dir)))
+            window.log_output.setPlainText("\n".join(f"log line {index}" for index in range(1, 251)))
+
+            window._copy_recent_log_content()
+
+            clipboard_text = QApplication.clipboard().text()
+            clipboard_lines = clipboard_text.splitlines()
+            self.assertEqual(clipboard_lines[0], "log line 51")
+            self.assertIn("log line 250", clipboard_text)
+            self.assertIn("最近 200 行日誌", window.status_label.text())
+            window.close()
+
+    def test_copy_recent_log_content_without_available_log_shows_message(self) -> None:
+        from verse_archive_toolkit.gui.builder_app import BuilderMainWindow
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            window = BuilderMainWindow(SettingsStore(Path(tmp_dir)))
+            window.log_output.clear()
+
+            with patch("verse_archive_toolkit.gui.builder_app.find_latest_log_path", return_value=None):
+                with patch("verse_archive_toolkit.gui.builder_app.QMessageBox.information") as information:
+                    window._copy_recent_log_content()
+
+            information.assert_called_once()
+            self.assertEqual(window.status_label.text(), "目前沒有可複製的日誌。")
             window.close()
 
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QThread, Signal, Slot
+from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSplitter,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -30,11 +31,13 @@ from PySide6.QtWidgets import (
 )
 
 from verse_archive_toolkit.app_paths import (
-    build_diagnostic_report,
+    DEFAULT_LOG_TAIL_LINES,
     find_latest_log_path,
     get_logs_directory,
     open_path_location,
+    read_log_tail,
     resolve_output_directory,
+    tail_text,
 )
 from verse_archive_toolkit.builder import BuildHooks, BuildProgress, BuildResult, build_selected_sources
 from verse_archive_toolkit.settings import (
@@ -429,7 +432,7 @@ class BuilderMainWindow(QMainWindow):
         main_layout.addWidget(tabs)
 
         footer = QLabel(
-            "本機設定檔與啟動日誌會存放在使用者目錄，不會寫回 Git 倉庫；路徑與診斷區可直接查看 / 開啟設定檔、日誌與輸出資料夾，API key 只在本機保存，介面中只顯示遮罩後內容。"
+            "本機設定檔與啟動日誌會存放在使用者目錄，不會寫回 Git 倉庫；路徑與診斷區可直接開啟相關位置，並一鍵複製最近日誌內容。API key 只在本機保存，介面中只顯示遮罩後內容。"
         )
         footer.setWordWrap(True)
         footer.setStyleSheet("color: #555;")
@@ -487,6 +490,14 @@ class BuilderMainWindow(QMainWindow):
     def _create_build_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        self.build_splitter = QSplitter(Qt.Vertical)
+        self.build_splitter.setChildrenCollapsible(False)
+
+        self.build_scroll_area = QScrollArea()
+        self.build_scroll_area.setWidgetResizable(True)
+        self.build_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        top_content = QWidget()
+        top_layout = QVBoxLayout(top_content)
 
         config_group = QGroupBox("建庫設定")
         form = QFormLayout(config_group)
@@ -545,7 +556,7 @@ class BuilderMainWindow(QMainWindow):
         form.addRow("每幾筆自動儲存", self.save_every_spin)
         form.addRow("請求逾時（秒）", self.request_timeout_spin)
         form.addRow("最大重試次數", self.max_retries_spin)
-        layout.addWidget(config_group)
+        top_layout.addWidget(config_group)
 
         button_row = QHBoxLayout()
         self.save_settings_button = QPushButton("儲存設定")
@@ -563,18 +574,15 @@ class BuilderMainWindow(QMainWindow):
         button_row.addWidget(self.cancel_button)
         button_row.addStretch(1)
         button_row.addWidget(self.open_translator_button)
-        layout.addLayout(button_row)
+        top_layout.addLayout(button_row)
 
-        layout.addWidget(self._create_paths_group())
+        top_layout.addWidget(self._create_paths_group())
 
         progress_group = QGroupBox("執行狀態")
         progress_layout = QVBoxLayout(progress_group)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.status_label = QLabel("待命中")
-        self.summary_label = QLabel("尚未開始建庫。")
-        self.summary_label.setWordWrap(True)
-        self.summary_label.setStyleSheet("color: #555;")
 
         stats_grid = QGridLayout()
         self.accepted_label = QLabel("0")
@@ -598,19 +606,39 @@ class BuilderMainWindow(QMainWindow):
         source_grid.addWidget(self._create_source_progress_group("poems", "英文詩"), 0, 0)
         source_grid.addWidget(self._create_source_progress_group("quotes", "哲思語錄"), 0, 1)
 
-        self.log_output = QPlainTextEdit()
-        self.log_output.setReadOnly(True)
-        self.log_output.setMinimumHeight(260)
-
         progress_layout.addWidget(self.progress_bar)
         progress_layout.addWidget(self.status_label)
         progress_layout.addLayout(source_grid)
         progress_layout.addWidget(QLabel("全域摘要"))
         progress_layout.addLayout(stats_grid)
-        progress_layout.addWidget(self.summary_label)
-        progress_layout.addWidget(QLabel("日誌輸出"))
-        progress_layout.addWidget(self.log_output)
-        layout.addWidget(progress_group, 1)
+        top_layout.addWidget(progress_group)
+        top_layout.addStretch(1)
+
+        self.build_scroll_area.setWidget(top_content)
+
+        log_group = QGroupBox("建庫摘要與日誌")
+        log_layout = QVBoxLayout(log_group)
+        self.summary_label = QLabel("尚未開始建庫。")
+        self.summary_label.setWordWrap(True)
+        self.summary_label.setStyleSheet("color: #555;")
+        self.log_output = QPlainTextEdit()
+        self.log_output.setReadOnly(True)
+        self.log_output.setMinimumHeight(260)
+        self.log_output.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.log_output.setPlaceholderText("建庫開始後，這裡會顯示即時日誌。")
+
+        log_layout.addWidget(QLabel("完成摘要"))
+        log_layout.addWidget(self.summary_label)
+        log_layout.addWidget(QLabel("日誌輸出"))
+        log_layout.addWidget(self.log_output, 1)
+
+        self.build_splitter.addWidget(self.build_scroll_area)
+        self.build_splitter.addWidget(log_group)
+        self.build_splitter.setStretchFactor(0, 3)
+        self.build_splitter.setStretchFactor(1, 2)
+        self.build_splitter.setSizes([560, 320])
+
+        layout.addWidget(self.build_splitter, 1)
 
         return widget
 
@@ -650,6 +678,7 @@ class BuilderMainWindow(QMainWindow):
     def _create_paths_group(self) -> QGroupBox:
         group = QGroupBox("路徑與診斷")
         layout = QGridLayout(group)
+        layout.setColumnStretch(1, 1)
 
         self.settings_path_display = self._create_path_display()
         self.logs_dir_display = self._create_path_display()
@@ -658,55 +687,34 @@ class BuilderMainWindow(QMainWindow):
 
         settings_open_button = QPushButton("開啟設定檔位置")
         settings_open_button.clicked.connect(self._open_settings_location)
-        settings_copy_button = QPushButton("複製設定檔路徑")
-        settings_copy_button.clicked.connect(
-            lambda: self._copy_to_clipboard(self.settings_path_display.text(), "設定檔路徑")
-        )
 
         logs_open_button = QPushButton("開啟日誌資料夾")
         logs_open_button.clicked.connect(self._open_logs_directory)
-        logs_copy_button = QPushButton("複製日誌路徑")
-        logs_copy_button.clicked.connect(
-            lambda: self._copy_to_clipboard(self.logs_dir_display.text(), "日誌資料夾路徑")
-        )
 
         latest_log_open_button = QPushButton("開啟最近日誌位置")
         latest_log_open_button.clicked.connect(self._open_latest_log_location)
-        latest_log_copy_button = QPushButton("複製最近日誌路徑")
-        latest_log_copy_button.clicked.connect(
-            lambda: self._copy_to_clipboard(self.latest_log_display.text(), "最近啟動日誌路徑")
-        )
+        self.copy_recent_log_button = QPushButton("複製最近日誌內容")
+        self.copy_recent_log_button.clicked.connect(self._copy_recent_log_content)
 
         output_open_button = QPushButton("開啟輸出資料夾")
         output_open_button.clicked.connect(self._open_output_directory)
-        output_copy_button = QPushButton("複製輸出路徑")
-        output_copy_button.clicked.connect(
-            lambda: self._copy_to_clipboard(self.output_path_display.text(), "輸出資料夾路徑")
-        )
 
         layout.addWidget(QLabel("設定檔位置"), 0, 0)
         layout.addWidget(self.settings_path_display, 0, 1)
         layout.addWidget(settings_open_button, 0, 2)
-        layout.addWidget(settings_copy_button, 0, 3)
 
         layout.addWidget(QLabel("日誌資料夾"), 1, 0)
         layout.addWidget(self.logs_dir_display, 1, 1)
         layout.addWidget(logs_open_button, 1, 2)
-        layout.addWidget(logs_copy_button, 1, 3)
 
         layout.addWidget(QLabel("最近啟動日誌"), 2, 0)
         layout.addWidget(self.latest_log_display, 2, 1)
         layout.addWidget(latest_log_open_button, 2, 2)
-        layout.addWidget(latest_log_copy_button, 2, 3)
+        layout.addWidget(self.copy_recent_log_button, 2, 3)
 
         layout.addWidget(QLabel("目前輸出資料夾"), 3, 0)
         layout.addWidget(self.output_path_display, 3, 1)
         layout.addWidget(output_open_button, 3, 2)
-        layout.addWidget(output_copy_button, 3, 3)
-
-        diagnostics_button = QPushButton("複製診斷資訊")
-        diagnostics_button.clicked.connect(self._copy_diagnostic_report)
-        layout.addWidget(diagnostics_button, 4, 3)
         return group
 
     def _create_source_progress_group(self, source: str, title: str) -> QGroupBox:
@@ -785,23 +793,41 @@ class BuilderMainWindow(QMainWindow):
         self.latest_log_display.setText(str(latest_log.resolve()) if latest_log is not None else "尚未找到")
         self.output_path_display.setText(str(self._current_output_directory()))
 
-    def _copy_to_clipboard(self, text: str, label: str) -> None:
-        if not text or text == "尚未找到":
-            self.status_label.setText(f"{label}目前無法複製。")
-            return
-        QApplication.clipboard().setText(text)
-        self.status_label.setText(f"{label}已複製到剪貼簿。")
-        self._append_log(f"{label}已複製到剪貼簿：{text}")
+    def _current_session_log_excerpt(self) -> str:
+        if not hasattr(self, "log_output"):
+            return ""
+        content = self.log_output.toPlainText().strip()
+        if not content:
+            return ""
+        lines = content.splitlines()
+        if len(lines) <= 2:
+            return ""
+        return tail_text(content, max_lines=DEFAULT_LOG_TAIL_LINES)
 
-    def _copy_diagnostic_report(self) -> None:
-        report = build_diagnostic_report(
-            output_dir=self._current_output_directory(),
-            settings_path=self.settings_store.path,
-            app_slug="builder-gui",
-        )
-        QApplication.clipboard().setText(report)
-        self.status_label.setText("診斷資訊已複製到剪貼簿。")
-        self._append_log("診斷資訊已複製到剪貼簿。")
+    def _copy_recent_log_content(self) -> None:
+        clipboard_text = self._current_session_log_excerpt()
+        copied_label = f"目前畫面中的最近 {DEFAULT_LOG_TAIL_LINES} 行日誌"
+
+        if not clipboard_text:
+            latest_log = find_latest_log_path("builder-gui")
+            if latest_log is None:
+                self.status_label.setText("目前沒有可複製的日誌。")
+                QMessageBox.information(self, "尚未找到日誌", "目前沒有可複製的主程式建庫工具日誌。")
+                return
+            try:
+                clipboard_text = read_log_tail(latest_log, max_lines=DEFAULT_LOG_TAIL_LINES)
+            except OSError as error:
+                QMessageBox.critical(self, "無法讀取日誌", str(error))
+                return
+            if not clipboard_text:
+                self.status_label.setText("最近日誌內容為空白。")
+                QMessageBox.information(self, "日誌內容為空", "已找到最近日誌，但內容為空白。")
+                return
+            copied_label = f"最近啟動日誌的最後 {DEFAULT_LOG_TAIL_LINES} 行"
+
+        QApplication.clipboard().setText(clipboard_text)
+        self.status_label.setText(f"已複製{copied_label}。")
+        self._append_log(f"已複製{copied_label}。")
 
     def _open_directory(self, path: Path, *, ensure_exists: bool = False) -> None:
         try:
