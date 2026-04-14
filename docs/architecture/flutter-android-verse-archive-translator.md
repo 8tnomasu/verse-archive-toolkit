@@ -1,222 +1,160 @@
-# Flutter Android 版架構說明
+# Flutter Android VerseArchiveTranslator 架構說明
 
 ## 目標
 
-Flutter Android 版的設計目標不是重新發明 VerseArchiveTranslator，而是把桌面版的核心翻譯流程搬到 Android，同時適配：
+這個 Flutter App 的架構目標不是重新設計產品，而是把桌面版 VerseArchiveTranslator 的核心語意拆成適合 Android 的最小可用層次：
 
-- Android Storage Access Framework
-- persisted URI permission
-- Syncthing 同步資料夾
-- 手機螢幕尺寸與長時間人工編修
+- UI 顯示與互動
+- controller 管理狀態與流程
+- repository 管理桌面版相容邏輯
+- storage bridge 管理 Android SAF 檔案 IO
 
-## 目錄位置
+## 目錄結構
 
-新 app 位於：
+App 專案位於：
 
-`apps/verse_archive_translator_flutter/`
+- `apps/verse_archive_translator_flutter/`
 
-既有 Python 桌面版程式碼不做破壞性修改。
+主要程式碼：
+
+- `lib/main.dart`
+- `lib/src/app.dart`
+- `lib/src/ui/home_page.dart`
+- `lib/src/controllers/translator_controller.dart`
+- `lib/src/services/archive_repository.dart`
+- `lib/src/services/preferences_store.dart`
+- `lib/src/models/archive_models.dart`
+- `lib/src/storage/workspace_storage.dart`
+- `android/app/src/main/kotlin/com/versearchive/verse_archive_translator_flutter/MainActivity.kt`
 
 ## 分層
 
-### 1. UI 層
+### UI
 
-檔案：
+`home_page.dart` 負責：
 
-- `lib/src/ui/home_page.dart`
-- `lib/src/app.dart`
+- 顯示 workspace 狀態
+- 顯示搜尋與 type filter
+- 顯示 translation filter for random pick
+- 顯示 entry list
+- 顯示原文 / 譯文編輯區
+- 顯示 warnings、error、info 與 dirty state
 
-責任：
+### Controller
 
-- 顯示工作目錄狀態
-- 顯示搜尋 / 篩選 / 列表
-- 顯示原文與譯文編修區
-- 顯示未儲存狀態、錯誤與警告
-- 在窄螢幕下切換「列表 / 編修」視圖
-- 在寬螢幕下提供雙欄模式
+`translator_controller.dart` 負責：
 
-### 2. 狀態控制層
+- App 啟動時恢復 recent workspace
+- 開啟 / 重新載入 workspace
+- 維護可見清單與選取 entry
+- 維護 draft 欄位
+- 判定未儲存狀態
+- 呼叫 repository 保存
 
-檔案：
+關鍵語意：
 
-- `lib/src/controllers/translator_controller.dart`
+- visible list = search + type filter
+- translation filter = random pick only
 
-責任：
+### Repository
 
-- 啟動時載入 app settings
-- 開啟 / 重新開啟工作目錄
-- 維護最近使用資料夾
-- 套用搜尋與篩選
-- 維護目前選取項目與譯文 draft
-- 判定 dirty state
-- 執行保存並刷新畫面資料
+`archive_repository.dart` 負責與桌面版對齊的領域邏輯：
 
-### 3. Repository / 業務邏輯層
+- 解析 archive root
+- 載入標準 JSON 檔
+- 空 JSON list 跳過
+- record / document 轉換
+- 保存時只更新 `cn` 欄位
+- 保存前做 mtime / signature 衝突檢查
 
-檔案：
+### Storage
 
-- `lib/src/services/archive_repository.dart`
-- `lib/src/models/archive_models.dart`
+`workspace_storage.dart` 定義 Flutter 端抽象。
 
-責任：
+`MainActivity.kt` 提供 Android 實作：
 
-- 複製桌面版 JSON 掃描與 entry 邏輯
-- 解析桌面版 `data/settings.json`
-- 推斷 archive root
-- 載入 JSON list
-- 建立 `ArchiveDocument` / `ArchiveEntry`
-- 複製桌面版 `translated / partial / untranslated` 規則
-- 搜尋與隨機挑選
-- 保存時只更新 `cn` 欄位並保留 metadata
-- 保存前做檔案衝突檢查
+- `pickWorkspace`
+- `listDirectory`
+- `readTextFile`
+- `writeTextFileIfUnchanged`
 
-## Android 檔案存取設計
+這一層不理解 VerseArchiveTranslator schema，只處理 URI tree 內的安全檔案操作。
 
-### 為什麼不用傳統 path
+### Preferences
 
-Android 11+ 之後，對共用儲存空間的直接路徑存取限制很大。Syncthing 同步到手機的資料夾，若要讓 App 長期可重開、可寫入、可重新瀏覽，最穩定的做法是：
+`preferences_store.dart` 使用 `SharedPreferences` 保存：
 
-- `ACTION_OPEN_DOCUMENT_TREE`
-- `takePersistableUriPermission`
-- 之後透過 `DocumentFile` / `ContentResolver` 存取
+- recent workspace bookmarks
+- `treeUri`
+- `displayName`
+- `archiveRelativePath`
+- `resolutionSource`
+- `lastOpenedAt`
 
-### 目前做法
+## 資料流
 
-檔案：
+1. App 啟動
+2. `PreferencesStore.load()`
+3. `TranslatorController.initialize()`
+4. 若存在上次 workspace，controller 呼叫 repository 重新解析與載入
+5. repository 透過 storage bridge 讀取 SAF tree 內 JSON
+6. models 轉成 `ArchiveDocument` / `ArchiveEntry`
+7. UI 綁定 controller 顯示內容
+8. 保存時 controller 將 draft 傳給 repository
+9. repository 檢查檔案未變更後寫回 JSON
 
-- `android/app/src/main/kotlin/com/versearchive/verse_archive_translator_flutter/MainActivity.kt`
-- `lib/src/storage/workspace_storage.dart`
+## 與桌面版對齊的重點決策
 
-做法：
+### 1. translation state
 
-1. Flutter 端呼叫 `MethodChannel`
-2. Android 端打開資料夾選取器
-3. 取得 tree URI
-4. 保存 persisted URI permission
-5. Flutter 端只記住：
-   - `treeUri`
-   - `displayName`
-   - `archiveRelativePath`
-6. 後續所有檔案列舉 / 讀取 / 寫入都透過：
-   - `listDirectory`
-   - `readTextFile`
-   - `writeTextFileIfUnchanged`
+沿用桌面版 `translation_state()`：
 
-### 工作目錄解析策略
+- 只把 `title.en`
+- `author.en`
+- `content.en`
 
-選到一個資料夾後，repository 會依序判斷：
+視為 required fields。
 
-1. 若 `data/settings.json` 存在，且 `translation.data_dir` 為可在 tree 內解析的相對路徑，就優先用它
-2. 否則若所選資料夾本身就有 archive JSON，直接使用
-3. 否則若存在 `output/` 且裡面有 archive JSON，改用 `output/`
-4. 否則報錯
+`content.lines` 只用於顯示與搜尋 fallback，不參與翻譯完成判定。
 
-這樣同時支援：
+### 2. 搜尋與 random pick
 
-- 直接選 output 目錄
-- 選 portable toolkit 根目錄
+沿用桌面版 UI 語意：
 
-## 資料模型對應
+- 搜尋結果由 search query + type filter 決定
+- translation filter 只作用在 random pick
 
-### Flutter 端主要 model
+### 3. 保存策略
 
-- `DirectoryItem`
-- `ArchiveDocument`
-- `ArchiveEntry`
-- `WorkspaceBookmark`
-- `ResolvedArchiveDirectory`
-- `TranslatorAppSettings`
+沿用桌面版 `save_translation()`：
 
-### 與桌面版對應
+- 先檢查 mtime
+- 再檢查 signature
+- deep copy record
+- 只更新 `title.cn`
+- 只更新 `author.cn`
+- 只更新 `content.cn`
 
-桌面版對應：
+### 4. archive root 解析
 
-- `ArchiveDocument` -> Flutter `ArchiveDocument`
-- `ArchiveEntry` -> Flutter `ArchiveEntry`
-- `translation_state()` -> Flutter `translationState()`
-- `TranslationRepository.search()` -> Flutter `filterEntries()`
-- `TranslationRepository.save_translation()` -> Flutter `ArchiveRepository.saveTranslation()`
+Android 版依序嘗試：
 
-## 保存策略
+1. `data/settings.json` 的 `translation.data_dir`
+2. 使用者目前選取的 tree 根目錄
+3. `output/`
 
-桌面版保存策略：
+這對齊桌面版 portable workflow，但保留 Android SAF 不能跳出已授權 tree 的限制。
 
-1. 檢查檔案 mtime
-2. 檢查當前 record signature
-3. 更新 `title.cn` / `author.cn` / `content.cn`
-4. 整份 JSON 重寫
+## 測試策略
 
-Flutter 版保留相同精神：
+目前測試集中在單元層：
 
-1. 重新讀取目前檔案
-2. 若 `lastModified` 已變，檢查當前 record signature 是否仍與使用者打開時相同
-3. 若不同，阻止保存並要求重新載入
-4. 若相同，保留其他 record 與 metadata 不變，只更新當前 record 的 `cn` 欄位
-5. 呼叫 `writeTextFileIfUnchanged()`，再次以 `expectedLastModified` 防止最後一瞬間競態覆寫
+- model 相容性測試
+- repository 保存與衝突測試
+- preferences round-trip 測試
+- controller restore / dirty state / random filter 測試
 
-## 設定儲存
+尚未加入的測試：
 
-### Android 版 app settings
-
-檔案：
-
-- `lib/src/services/preferences_store.dart`
-
-目前保存在 app-private `SharedPreferences`。
-
-內容包括：
-
-- 最近使用工作目錄列表
-- 最近一次成功打開的 workspace bookmark
-
-### 與桌面版的關係
-
-Android 版不會改寫桌面版 `data/settings.json`，避免把 Android 專屬 URI 設定寫進桌面 portable config。
-
-但是：
-
-- 若使用者選到 portable 根目錄
-- 且存在桌面版 `data/settings.json`
-
-Android 版會讀取其中的 `translation.data_dir` 概念來定位實際 archive root。
-
-## UI 佈局策略
-
-### 手機
-
-- 上方工作目錄資訊
-- 中間列表或編修區
-- 底部 `NavigationBar` 切換：
-  - 列表
-  - 編修
-
-### 大螢幕 / 平板
-
-- 左側列表
-- 右側編修區
-
-## 驗證策略
-
-目前至少做到：
-
-- `flutter analyze` 通過
-- `flutter test` 通過
-- `flutter build apk --debug` 成功
-
-測試檔：
-
-- `test/archive_repository_test.dart`
-
-重點覆蓋：
-
-- 從桌面版 `settings.json` 解析 archive root
-- 保存翻譯時保留 `content.lines`
-
-## 目前已知取捨
-
-- 目前以單筆保存為主，沒有額外做草稿自動保存
-- 沒有做複雜的多檔批次編修
-- 沒有實作背景監看外部檔案變化，只在保存與重載時檢查衝突
-- 設定使用 SharedPreferences，沒有嘗試和桌面版共用同一份 settings 檔
-
-這些取捨都是為了先交付一個最小但可編譯、可執行、可實際保存的 Android 初版
+- 真機或 emulator 上的 SAF instrumentation test
+- 大型資料集效能測試

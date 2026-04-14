@@ -1,159 +1,102 @@
 # VerseArchiveTranslator Flutter Android App
 
-這個目錄包含 `VerseArchiveTranslator` 的 Flutter Android 初版。
+這個目錄提供 `VerseArchiveTranslator` 的 Flutter Android 初版，目標不是另做一套翻譯平台，而是把桌面版的人工翻譯與人工編修流程搬到手機上，並維持既有 JSON 資料、設定概念與輸出相容。
 
-它的定位不是新的翻譯平台，也不是 AI / API 翻譯工具，而是：
+## 目前已完成
 
-- 直接操作本機資料夾
-- 編修與保存人工翻譯
-- 與桌面版 JSON schema 相容
-- 適合搭配 Syncthing 在手機上使用
+- 以 Android Storage Access Framework 選取 Syncthing 同步下來的工作目錄
+- 取得並保存 persisted URI permission
+- 保存 recent workspaces，重開 App 後自動恢復上次工作目錄
+- 依桌面版語意解析 archive root
+  - 先讀 `data/settings.json` 的 `translation.data_dir`
+  - 找不到時回退到目前選取目錄
+  - 再回退到 `output/`
+- 載入標準 archive JSON
+  - `english_poems.json`
+  - `english_poems_review.json`
+  - `philosophy_quotes.json`
+  - `philosophy_quotes_review.json`
+- 若標準檔不存在，回退載入目前目錄下的 `*.json`
+- 略過空 JSON list，行為與桌面版一致
+- 搜尋 author/title/content 與 `content.lines`
+- 以 type filter 篩選清單
+- 以 translation filter 控制隨機挑選範圍
+  - 這個 filter 不影響目前清單，與桌面版一致
+- 顯示原文、譯文、翻譯狀態與常見 metadata
+- 只更新 `title.cn`、`author.cn`、`content.cn`
+- 保留 `content.lines` 與其他 metadata，不覆寫 review 欄位
+- 保存前檢查檔案時間戳與 record signature，避免寫壞同步中的檔案
+- 顯示未儲存狀態
 
-## 功能範圍
+## 桌面版對應
 
-目前已完成：
+核心對照來源：
 
-- 選擇工作資料夾
-- 支援 Android Storage Access Framework
-- persisted URI permission
-- recent workspaces
-- 自動解析 portable 根目錄與 `translation.data_dir`
-- 載入既有 archive JSON
-- 搜尋
-- 類型篩選
-- 翻譯狀態篩選
-- 隨機挑一筆
-- 顯示原文
-- 編輯 `title.cn` / `author.cn` / `content.cn`
-- 保存回原始 JSON
-- 未儲存狀態提示
-- 保存前衝突檢查
-- 載入警告顯示
+- `src/verse_archive_toolkit/translator.py`
+- `src/verse_archive_toolkit/gui/translator_app.py`
+- `src/verse_archive_toolkit/records.py`
+- `src/verse_archive_toolkit/app_paths.py`
+- `src/verse_archive_toolkit/settings.py`
+- `src/verse_archive_toolkit/settings_store.py`
 
-## 與桌面版的關係
+目前 Flutter 版已對齊的關鍵語意：
 
-Flutter 版是依照 repository 中現有桌面版實作搬移而來，核心相容原則如下：
+- `translation_state()` 只看 `title.en`、`author.en`、`content.en`
+- `content_en` 顯示時可回退到 `content.lines`
+- 搜尋會同時搜尋 `content.en` 與 `content.lines`
+- random pick 使用 type filter 與 translation filter，但不吃 search query
+- 保存時先檢查檔案變更，再檢查 signature，最後只改中文欄位
 
-- 沿用同一套 JSON schema
-- 沿用同一套標準檔名
-- 沿用同一套翻譯狀態判定
-- 保存時只更新 `cn` 欄位
-- 保留 `content.lines` 與 review metadata
+## Android 檔案存取說明
 
-詳細分析與相容性說明請參考：
-
-- `../../docs/analysis/verse_archive_translator_desktop_analysis.md`
-- `../../docs/compatibility/verse-archive-translator-mobile-compatibility.md`
-- `../../docs/architecture/flutter-android-verse-archive-translator.md`
-
-## Android 檔案存取限制與做法
-
-### 為什麼不用傳統路徑
-
-Android 對共用儲存空間的路徑式存取限制很多，尤其是使用者自己選到的 Syncthing 同步資料夾。
-
-若要讓 app：
-
-- 可以重新打開先前選過的資料夾
-- 可以在重啟 app 後仍然讀寫
-- 不依賴寬鬆的 legacy storage 權限
-
-最穩定的方式是：
+Android 版不能假設能直接拿到傳統絕對路徑，因此實作採用：
 
 - `ACTION_OPEN_DOCUMENT_TREE`
 - `takePersistableUriPermission`
-- `DocumentFile` / `ContentResolver`
+- `DocumentFile`
+- `ContentResolver`
 
-### 目前實作
+App 內部保存的是 `treeUri` 與 archive 相對路徑，不保存絕對檔案系統路徑。
 
-Flutter 端透過 `MethodChannel` 呼叫 Android 原生層：
+### 與桌面版不同之處
 
-- `pickWorkspace`
-- `listDirectory`
-- `readTextFile`
-- `writeTextFileIfUnchanged`
+桌面版的 `translation.data_dir` 會交給 `resolve_output_directory()` 做一般路徑解析；Android 版只能在使用者授權的 tree 內相對解析。因此：
 
-App 端記住的是：
+- 相對子目錄，例如 `output`，可正常對齊 portable workflow
+- `.` 會視為目前 tree 根目錄
+- 包含父層跳脫或絕對路徑的設定值無法在 Android SAF 下直接還原
 
-- tree URI
-- 顯示名稱
-- tree 內的 archive 相對路徑
+這是平台限制，不是資料格式變更。
 
-而不是一般 filesystem absolute path。
-
-### 工作目錄解析順序
-
-選到一個資料夾後，會依序判斷：
-
-1. 若有 `data/settings.json` 且可讀到 `translation.data_dir`，優先使用它
-2. 否則若所選資料夾本身就有 archive JSON，直接使用
-3. 否則若有 `output/` 子目錄且內有 archive JSON，就切到 `output/`
-4. 否則報錯
-
-## 建置
-
-### 需求
-
-- Flutter 3.41.6 或相近版本
-- Android SDK
-
-### 安裝依賴
+## 建置與執行
 
 ```bash
 flutter pub get
-```
-
-### 分析
-
-```bash
 flutter analyze
-```
-
-### 測試
-
-```bash
 flutter test
-```
-
-### 產生 debug APK
-
-```bash
 flutter build apk --debug
-```
-
-本次實作已成功產生：
-
-- `build/app/outputs/flutter-apk/app-debug.apk`
-
-## 執行
-
-```bash
 flutter run
 ```
 
-第一次啟動後：
+Debug APK 會輸出到：
 
-1. 點右上角資料夾按鈕
-2. 選擇 Syncthing 同步下來的資料夾
-3. 若選的是 portable 根目錄，app 會嘗試讀取 `data/settings.json`
-4. 進入列表並選擇條目開始編修
+- `build/app/outputs/flutter-apk/app-debug.apk`
 
-## 驗證結果
+## 測試重點
 
-已完成的驗證：
+目前測試覆蓋：
 
-- `flutter analyze` 通過
-- `flutter test` 通過
-- `flutter build apk --debug` 成功
+- archive root 解析
+- 空 JSON list 跳過
+- 保存時只更新中文欄位並保留 metadata
+- mtime / signature 衝突檢查
+- translation state 與搜尋語意
+- recent workspace bookmark round-trip
+- controller 的 workspace restore、dirty state、random filter 語意
 
-## 目前限制
+## 已知限制
 
-- 尚未提供自動草稿保存
-- 尚未做超大 JSON 的分頁 / lazy loading
-- 尚未加入上一筆 / 下一筆快捷跳轉
-- 設定保存在 app-private storage，不會回寫桌面版 `data/settings.json`
-
-## 參考
-
-- [Android documents and files training](https://developer.android.com/training/data-storage/shared/documents-files)
-- [AndroidX DocumentFile reference](https://developer.android.com/reference/androidx/documentfile/provider/DocumentFile)
+- 目前沒有全文 lazy loading，大型資料集仍是一次載入
+- 沒有桌面版的前後筆快捷移動與鍵盤導向操作
+- Android 無法直接復用桌面版的絕對路徑型 `translation.data_dir`
+- 尚未加入更細的檔案級 merge / diff UI

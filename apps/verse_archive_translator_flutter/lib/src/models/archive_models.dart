@@ -375,28 +375,16 @@ List<ArchiveEntry> buildEntries(List<ArchiveDocument> documents) {
   return entries;
 }
 
-List<ArchiveEntry> filterEntries(
+List<ArchiveEntry> searchEntries(
   List<ArchiveEntry> entries, {
   required String query,
   required EntryTypeFilter typeFilter,
-  required TranslationFilter translationFilter,
 }) {
   final normalizedQuery = query.trim().toLowerCase();
 
   return entries
       .where((entry) {
-        if (typeFilter == EntryTypeFilter.poems &&
-            entry.typeLabel != 'english_poem') {
-          return false;
-        }
-        if (typeFilter == EntryTypeFilter.quotes &&
-            entry.typeLabel != 'philosophy') {
-          return false;
-        }
-
-        final state = translationState(entry.record);
-        if (translationFilter != TranslationFilter.all &&
-            state != translationFilter.name) {
+        if (!_matchesTypeFilter(entry, typeFilter)) {
           return false;
         }
 
@@ -422,12 +410,21 @@ ArchiveEntry? randomEntry(
   required TranslationFilter translationFilter,
   Random? random,
 }) {
-  final filtered = filterEntries(
-    entries,
-    query: '',
-    typeFilter: typeFilter,
-    translationFilter: translationFilter,
-  );
+  final filtered = entries
+      .where((entry) {
+        if (!_matchesTypeFilter(entry, typeFilter)) {
+          return false;
+        }
+
+        final state = translationState(entry.record);
+        if (translationFilter != TranslationFilter.all &&
+            state != translationFilter.name) {
+          return false;
+        }
+
+        return true;
+      })
+      .toList(growable: false);
 
   if (filtered.isEmpty) {
     return null;
@@ -502,6 +499,17 @@ String? normalizeRelativeDirectory(String rawPath) {
   }
 
   return segments.join('/');
+}
+
+bool _matchesTypeFilter(ArchiveEntry entry, EntryTypeFilter typeFilter) {
+  if (typeFilter == EntryTypeFilter.poems &&
+      entry.typeLabel != 'english_poem') {
+    return false;
+  }
+  if (typeFilter == EntryTypeFilter.quotes && entry.typeLabel != 'philosophy') {
+    return false;
+  }
+  return true;
 }
 
 extension on Map<Object?, Object?> {

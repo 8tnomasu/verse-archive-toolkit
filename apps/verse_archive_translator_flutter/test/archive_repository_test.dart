@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verse_archive_translator_flutter/src/models/archive_models.dart';
 import 'package:verse_archive_translator_flutter/src/services/archive_repository.dart';
-import 'package:verse_archive_translator_flutter/src/storage/workspace_storage.dart';
+
+import 'test_support.dart';
 
 void main() {
   group('ArchiveRepository', () {
@@ -26,7 +27,91 @@ void main() {
       expect(resolved.source, 'desktop_settings');
     });
 
-    test('saves translation without touching content lines', () async {
+    test('skips empty json lists like desktop repository', () async {
+      final storage = FakeWorkspaceStorage(
+        files: <String, String>{
+          'english_poems.json': '[]',
+          'philosophy_quotes.json': jsonEncode(<Object?>[
+            <String, Object?>{
+              'type': 'philosophy',
+              'title': <String, Object?>{'en': '', 'cn': ''},
+              'author': <String, Object?>{'en': 'Author', 'cn': ''},
+              'content': <String, Object?>{
+                'lines': <String>['Quote'],
+                'en': 'Quote',
+                'cn': '',
+              },
+            },
+          ]),
+        },
+      );
+
+      final repository = ArchiveRepository(storage);
+      final result = await repository.loadWorkspace(sampleWorkspaceBookmark());
+
+      expect(result.documents, hasLength(1));
+      expect(
+        result.documents.single.fileRelativePath,
+        'philosophy_quotes.json',
+      );
+    });
+
+    test('save only updates cn fields and preserves review metadata', () async {
+      final storage = FakeWorkspaceStorage(
+        files: <String, String>{
+          'english_poems_review.json': jsonEncode(<Object?>[
+            <String, Object?>{
+              'type': 'english_poem',
+              'reason': 'manual_review',
+              'filter_detail': 'line_count',
+              'source_tag': 'batch-01',
+              'title': <String, Object?>{'en': 'Night River', 'cn': ''},
+              'author': <String, Object?>{'en': 'Jane Doe', 'cn': ''},
+              'content': <String, Object?>{
+                'lines': <String>['One line', 'Two line'],
+                'en': 'One line\nTwo line',
+                'cn': '',
+              },
+            },
+          ]),
+        },
+      );
+
+      final repository = ArchiveRepository(storage);
+      final workspace = sampleWorkspaceBookmark();
+      final loadResult = await repository.loadWorkspace(workspace);
+      final entry = buildEntries(loadResult.documents).single;
+
+      final saveResult = await repository.saveTranslation(
+        workspace: workspace,
+        entry: entry,
+        titleCn: 'Night River CN',
+        authorCn: 'Jane Doe CN',
+        contentCn: 'Line one cn\nLine two cn',
+      );
+
+      final savedJson =
+          jsonDecode(storage.files['english_poems_review.json']!)
+              as List<Object?>;
+      final savedRecord = savedJson.single as Map<Object?, Object?>;
+      final savedTitle = savedRecord['title'] as Map<Object?, Object?>;
+      final savedAuthor = savedRecord['author'] as Map<Object?, Object?>;
+      final savedContent = savedRecord['content'] as Map<Object?, Object?>;
+
+      expect(savedTitle['en'], 'Night River');
+      expect(savedTitle['cn'], 'Night River CN');
+      expect(savedAuthor['en'], 'Jane Doe');
+      expect(savedAuthor['cn'], 'Jane Doe CN');
+      expect(savedContent['en'], 'One line\nTwo line');
+      expect(savedContent['lines'], <String>['One line', 'Two line']);
+      expect(savedContent['cn'], 'Line one cn\nLine two cn');
+      expect(savedRecord['reason'], 'manual_review');
+      expect(savedRecord['filter_detail'], 'line_count');
+      expect(savedRecord['source_tag'], 'batch-01');
+      expect(saveResult.updatedEntry.record['reason'], 'manual_review');
+    });
+
+    test('rejects save when file mtime changed before save', () async {
       final storage = FakeWorkspaceStorage(
         files: <String, String>{
           'english_poems.json': jsonEncode(<Object?>[
@@ -45,157 +130,91 @@ void main() {
       );
 
       final repository = ArchiveRepository(storage);
-      final workspace = WorkspaceBookmark(
-        treeUri: 'workspace',
-        displayName: 'Workspace',
-        archiveRelativePath: '',
-        resolutionSource: 'selected_directory',
-        lastOpenedAt: DateTime.now(),
-      );
-
+      final workspace = sampleWorkspaceBookmark();
       final loadResult = await repository.loadWorkspace(workspace);
       final entry = buildEntries(loadResult.documents).single;
 
-      final saveResult = await repository.saveTranslation(
-        workspace: workspace,
-        entry: entry,
-        titleCn: 'Night River CN',
-        authorCn: 'Jane Doe CN',
-        contentCn: 'Line one cn\nLine two cn',
+      storage.replaceFile(
+        'english_poems.json',
+        jsonEncode(<Object?>[
+          <String, Object?>{
+            'type': 'english_poem',
+            'title': <String, Object?>{'en': 'Night River', 'cn': ''},
+            'author': <String, Object?>{'en': 'Jane Doe', 'cn': ''},
+            'content': <String, Object?>{
+              'lines': <String>['Changed line'],
+              'en': 'Changed line',
+              'cn': '',
+            },
+          },
+        ]),
       );
 
-      final content =
-          saveResult.updatedEntry.record['content'] as Map<Object?, Object?>;
-      expect(content['lines'], <String>['One line', 'Two line']);
-      expect(content['cn'], 'Line one cn\nLine two cn');
-
-      final savedJson =
-          jsonDecode(storage.files['english_poems.json']!) as List<Object?>;
-      final savedRecord = savedJson.single as Map<Object?, Object?>;
-      final savedContent = savedRecord['content'] as Map<Object?, Object?>;
-      expect(savedContent['lines'], <String>['One line', 'Two line']);
-      expect(savedContent['cn'], 'Line one cn\nLine two cn');
+      expect(
+        () => repository.saveTranslation(
+          workspace: workspace,
+          entry: entry,
+          titleCn: 'Night River CN',
+          authorCn: 'Jane Doe CN',
+          contentCn: 'Line one cn\nLine two cn',
+        ),
+        throwsA(isA<RepositoryException>()),
+      );
     });
-  });
-}
 
-class FakeWorkspaceStorage implements WorkspaceStorage {
-  FakeWorkspaceStorage({required Map<String, String> files})
-    : files = Map<String, String>.from(files) {
-    var counter = 1;
-    for (final path in this.files.keys) {
-      _lastModified[path] = counter;
-      counter += 1;
-    }
-  }
+    test(
+      'rejects save when signature changed even if mtime did not bump',
+      () async {
+        final storage = FakeWorkspaceStorage(
+          files: <String, String>{
+            'english_poems.json': jsonEncode(<Object?>[
+              <String, Object?>{
+                'type': 'english_poem',
+                'title': <String, Object?>{'en': 'Night River', 'cn': ''},
+                'author': <String, Object?>{'en': 'Jane Doe', 'cn': ''},
+                'content': <String, Object?>{
+                  'lines': <String>['One line', 'Two line'],
+                  'en': 'One line\nTwo line',
+                  'cn': '',
+                },
+              },
+            ]),
+          },
+        );
 
-  final Map<String, String> files;
-  final Map<String, int> _lastModified = <String, int>{};
+        final repository = ArchiveRepository(storage);
+        final workspace = sampleWorkspaceBookmark();
+        final loadResult = await repository.loadWorkspace(workspace);
+        final entry = buildEntries(loadResult.documents).single;
 
-  @override
-  Future<List<DirectoryItem>> listDirectory({
-    required String treeUri,
-    String relativePath = '',
-  }) async {
-    final directory = _normalize(relativePath);
-    final childNames = <String, _ChildEntry>{};
+        storage.replaceFile(
+          'english_poems.json',
+          jsonEncode(<Object?>[
+            <String, Object?>{
+              'type': 'english_poem',
+              'title': <String, Object?>{'en': 'Night River Updated', 'cn': ''},
+              'author': <String, Object?>{'en': 'Jane Doe', 'cn': ''},
+              'content': <String, Object?>{
+                'lines': <String>['One line', 'Two line'],
+                'en': 'One line\nTwo line',
+                'cn': '',
+              },
+            },
+          ]),
+          bumpLastModified: false,
+        );
 
-    for (final filePath in files.keys) {
-      if (directory.isNotEmpty &&
-          filePath != directory &&
-          !filePath.startsWith('$directory/')) {
-        continue;
-      }
-
-      final remaining = directory.isEmpty
-          ? filePath
-          : filePath.substring(directory.length + 1);
-      if (remaining.isEmpty) {
-        continue;
-      }
-
-      final firstSegment = remaining.split('/').first;
-      final childPath = directory.isEmpty
-          ? firstSegment
-          : '$directory/$firstSegment';
-      final isDirectory = remaining.contains('/');
-      childNames[firstSegment] = _ChildEntry(
-        relativePath: childPath,
-        isDirectory: isDirectory,
-      );
-    }
-
-    final items =
-        childNames.entries
-            .map((entry) {
-              final child = entry.value;
-              return DirectoryItem(
-                name: entry.key,
-                relativePath: child.relativePath,
-                isDirectory: child.isDirectory,
-                lastModified: _lastModified[child.relativePath] ?? 0,
-                size: child.isDirectory
-                    ? null
-                    : files[child.relativePath]?.length,
-              );
-            })
-            .toList(growable: false)
-          ..sort((left, right) => left.name.compareTo(right.name));
-
-    return items;
-  }
-
-  @override
-  Future<PickedWorkspace?> pickWorkspace() async => null;
-
-  @override
-  Future<TextFileSnapshot> readTextFile({
-    required String treeUri,
-    required String relativePath,
-  }) async {
-    final path = _normalize(relativePath);
-    final content = files[path];
-    if (content == null) {
-      throw const StorageException(
-        message: 'File not found',
-        code: 'not_found',
-      );
-    }
-
-    return TextFileSnapshot(
-      relativePath: path,
-      name: basenameOfRelativePath(path),
-      content: content,
-      lastModified: _lastModified[path] ?? 0,
+        expect(
+          () => repository.saveTranslation(
+            workspace: workspace,
+            entry: entry,
+            titleCn: 'Night River CN',
+            authorCn: 'Jane Doe CN',
+            contentCn: 'Line one cn\nLine two cn',
+          ),
+          throwsA(isA<RepositoryException>()),
+        );
+      },
     );
-  }
-
-  @override
-  Future<WriteTextResult> writeTextFileIfUnchanged({
-    required String treeUri,
-    required String relativePath,
-    required int expectedLastModified,
-    required String content,
-  }) async {
-    final path = _normalize(relativePath);
-    final currentLastModified = _lastModified[path] ?? 0;
-    if (expectedLastModified != currentLastModified) {
-      throw const StorageException(message: 'stale write', code: 'stale');
-    }
-
-    files[path] = content;
-    _lastModified[path] = currentLastModified + 1;
-    return WriteTextResult(lastModified: _lastModified[path]!);
-  }
-
-  String _normalize(String rawPath) {
-    return rawPath.replaceAll('\\', '/').trim();
-  }
-}
-
-class _ChildEntry {
-  const _ChildEntry({required this.relativePath, required this.isDirectory});
-
-  final String relativePath;
-  final bool isDirectory;
+  });
 }

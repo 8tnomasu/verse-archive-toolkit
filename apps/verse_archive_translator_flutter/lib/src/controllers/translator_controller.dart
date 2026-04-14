@@ -201,7 +201,6 @@ class TranslatorController extends ChangeNotifier {
       return;
     }
     _translationFilter = value;
-    _rebuildVisibleEntries(preserveSelection: _selectedEntry);
     notifyListeners();
   }
 
@@ -323,11 +322,10 @@ class TranslatorController extends ChangeNotifier {
 
   void _rebuildVisibleEntries({ArchiveEntry? preserveSelection}) {
     final previousSelection = preserveSelection ?? _selectedEntry;
-    _visibleEntries = filterEntries(
+    _visibleEntries = searchEntries(
       _allEntries,
       query: _searchQuery,
       typeFilter: _typeFilter,
-      translationFilter: _translationFilter,
     );
 
     if (_visibleEntries.isEmpty) {

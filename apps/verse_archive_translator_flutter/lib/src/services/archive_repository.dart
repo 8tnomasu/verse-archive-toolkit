@@ -56,12 +56,13 @@ class ArchiveRepository {
             desktopSettingValue: desktopDataDir,
           );
         }
+
         notes.add(
-          '桌面版 settings.json 指向的 translation.data_dir 目前沒有可讀取的 archive JSON。',
+          '已讀取 data/settings.json 的 translation.data_dir，但該目錄下沒有找到 VerseArchiveTranslator JSON。',
         );
       } else {
         notes.add(
-          '桌面版 settings.json 的 translation.data_dir 不是目前可由 Android SAF 解析的相對路徑。',
+          'data/settings.json 的 translation.data_dir 無法在 Android SAF 下相對解析，已改用目前選取目錄或 output/ 嘗試載入。',
         );
       }
     }
@@ -91,7 +92,7 @@ class ArchiveRepository {
     }
 
     throw const RepositoryException(
-      '所選資料夾中找不到 VerseArchiveTranslator 相容的 JSON 檔案。請選擇輸出資料夾本身，或包含 output/ 的 portable 根目錄。',
+      '找不到 VerseArchiveTranslator JSON。請選取包含 archive JSON 的目錄，或選取 portable toolkit 根目錄讓 App 自動進入 output/。',
     );
   }
 
@@ -104,7 +105,7 @@ class ArchiveRepository {
     );
 
     if (files.isEmpty) {
-      throw const RepositoryException('目前工作目錄中沒有可讀取的 JSON 檔案。');
+      throw const RepositoryException('目前工作目錄下找不到可載入的 archive JSON。');
     }
 
     final warnings = <LoadWarning>[];
@@ -127,6 +128,10 @@ class ArchiveRepository {
           continue;
         }
 
+        if (payload.isEmpty) {
+          continue;
+        }
+
         documents.add(
           ArchiveDocument(
             fileRelativePath: snapshot.relativePath,
@@ -136,7 +141,7 @@ class ArchiveRepository {
         );
       } on FormatException {
         warnings.add(
-          LoadWarning(path: file.relativePath, message: 'JSON 格式損壞或內容不是合法文字。'),
+          LoadWarning(path: file.relativePath, message: 'JSON 格式錯誤，已略過。'),
         );
       } on StorageException catch (error) {
         warnings.add(
@@ -162,24 +167,26 @@ class ArchiveRepository {
 
     final latestPayload = jsonDecode(latestSnapshot.content);
     if (latestPayload is! List) {
-      throw const RepositoryException('目前檔案內容不是 JSON list，無法保存。');
+      throw const RepositoryException('目標檔案不是 JSON list，無法保存。');
     }
 
     final latestRecords = List<Object?>.from(latestPayload);
     if (entry.index >= latestRecords.length) {
-      throw const RepositoryException('目前檔案中的 record 索引已變動，請重新載入。');
+      throw const RepositoryException('目標 record 已不存在，請重新載入工作目錄。');
     }
 
     final currentRecord = asJsonMap(latestRecords[entry.index]);
     if (currentRecord == null) {
-      throw const RepositoryException('目前索引位置已不再是可編修的 JSON 物件。');
+      throw const RepositoryException('目標 record 已不是 JSON object，無法保存。');
     }
 
     if (latestSnapshot.lastModified != entry.lastModified) {
-      final currentSignature = buildEntrySignature(currentRecord);
-      if (currentSignature != entry.signature) {
-        throw const RepositoryException('檔案已被其他裝置或程式修改。為避免覆寫衝突，請先重新載入。');
-      }
+      throw const RepositoryException('檔案在保存前已變更，請先重新載入。');
+    }
+
+    final currentSignature = buildEntrySignature(currentRecord);
+    if (currentSignature != entry.signature) {
+      throw const RepositoryException('record 內容在保存前已變更，請先重新載入。');
     }
 
     final updatedRecord = deepCopyJsonMap(currentRecord);
@@ -203,7 +210,7 @@ class ArchiveRepository {
 
     final savedRecord = asJsonMap(latestRecords[entry.index]);
     if (savedRecord == null) {
-      throw const RepositoryException('保存後無法重新建立 record。');
+      throw const RepositoryException('保存後無法解析更新後的 record。');
     }
 
     return SaveTranslationResult(
