@@ -141,3 +141,14 @@ powershell -ExecutionPolicy Bypass -File .\packaging\build-windows-debug.ps1
 - `ZenQuotes API key` 只保存在本機設定檔，不會提交到 Git 倉庫
 - 建議先用少量資料測試，再進行大批量建庫
 - 請自行確認 PoetryDB、ZenQuotes 與產出資料的使用限制、署名要求與再散布責任
+
+## Flutter Android App
+
+repository 內另新增一個 Flutter Android 初版，專門對應桌面版 `VerseArchiveTranslator` 的人工翻譯 / 編修流程：
+
+- App 專案：`apps/verse_archive_translator_flutter/`
+- App README：`apps/verse_archive_translator_flutter/README.md`
+- 桌面版分析：`docs/analysis/verse_archive_translator_desktop_analysis.md`
+- 架構說明：`docs/architecture/flutter-android-verse-archive-translator.md`
+- 相容性說明：`docs/compatibility/verse-archive-translator-mobile-compatibility.md`
+- Roadmap：`docs/roadmap/flutter-android-verse-archive-translator-roadmap.md`
