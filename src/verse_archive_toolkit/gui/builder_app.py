@@ -493,19 +493,34 @@ class BuilderMainWindow(QMainWindow):
     def _create_build_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.build_splitter = QSplitter(Qt.Vertical)
         self.build_splitter.setChildrenCollapsible(False)
+
+        self.top_splitter = QSplitter(Qt.Horizontal)
+        self.top_splitter.setChildrenCollapsible(False)
+
+        self.log_panel = QGroupBox("建庫日誌")
+        log_layout = QVBoxLayout(self.log_panel)
+        log_layout.setContentsMargins(10, 12, 10, 10)
+        log_layout.setSpacing(6)
+        self.log_output = QPlainTextEdit()
+        self.log_output.setReadOnly(True)
+        self.log_output.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.log_output.setPlaceholderText("建庫開始後，這裡會顯示即時日誌。")
+        log_layout.addWidget(self.log_output, 1)
 
         self.build_scroll_area = QScrollArea()
         self.build_scroll_area.setWidgetResizable(True)
         self.build_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.build_scroll_area.setMinimumHeight(500)
+        self.build_scroll_area.setMinimumWidth(360)
         self.build_scroll_area.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
             QSizePolicy.Policy.Expanding,
         )
         top_content = QWidget()
         top_layout = QVBoxLayout(top_content)
+        top_layout.setContentsMargins(0, 0, 0, 0)
 
         config_group = QGroupBox("建庫設定")
         form = QFormLayout(config_group)
@@ -570,11 +585,15 @@ class BuilderMainWindow(QMainWindow):
         top_layout.addStretch(1)
 
         self.build_scroll_area.setWidget(top_content)
+        self.top_splitter.addWidget(self.log_panel)
+        self.top_splitter.addWidget(self.build_scroll_area)
+        self.top_splitter.setStretchFactor(0, 3)
+        self.top_splitter.setStretchFactor(1, 2)
 
         self.runtime_panel = QWidget()
         self.runtime_panel.setSizePolicy(
             QSizePolicy.Policy.Preferred,
-            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Minimum,
         )
         runtime_layout = QVBoxLayout(self.runtime_panel)
         runtime_layout.setContentsMargins(0, 0, 0, 0)
@@ -602,12 +621,12 @@ class BuilderMainWindow(QMainWindow):
         action_row.addWidget(self.open_translator_button)
         runtime_layout.addLayout(action_row)
 
-        progress_group = QGroupBox("執行狀態")
-        progress_group.setSizePolicy(
+        self.runtime_status_group = QGroupBox("執行狀態")
+        self.runtime_status_group.setSizePolicy(
             QSizePolicy.Policy.Preferred,
             QSizePolicy.Policy.Expanding,
         )
-        progress_layout = QVBoxLayout(progress_group)
+        progress_layout = QVBoxLayout(self.runtime_status_group)
         progress_layout.setContentsMargins(10, 12, 10, 10)
         progress_layout.setSpacing(8)
         self.progress_bar = QProgressBar()
@@ -632,57 +651,42 @@ class BuilderMainWindow(QMainWindow):
         stats_grid.addWidget(QLabel("本次已處理"), 2, 0)
         stats_grid.addWidget(self.processed_label, 2, 1)
 
-        source_grid = QGridLayout()
+        source_panel = QWidget()
+        source_grid = QGridLayout(source_panel)
+        source_grid.setContentsMargins(0, 0, 0, 0)
+        source_grid.setHorizontalSpacing(8)
+        source_grid.setVerticalSpacing(8)
         source_grid.addWidget(self._create_source_progress_group("poems", "英文詩"), 0, 0)
         source_grid.addWidget(self._create_source_progress_group("quotes", "哲思語錄"), 0, 1)
+        source_grid.setColumnStretch(0, 1)
+        source_grid.setColumnStretch(1, 1)
 
-        progress_layout.addWidget(self.progress_bar)
-        progress_layout.addWidget(self.status_label)
-        progress_layout.addLayout(source_grid)
-        progress_layout.addWidget(QLabel("全域摘要"))
-        progress_layout.addLayout(stats_grid)
-
-        log_group = QGroupBox("建庫摘要與日誌")
-        log_group.setSizePolicy(
-            QSizePolicy.Policy.Preferred,
-            QSizePolicy.Policy.Maximum,
-        )
-        log_layout = QVBoxLayout(log_group)
-        log_layout.setContentsMargins(10, 12, 10, 10)
-        log_layout.setSpacing(6)
+        self.summary_group = QGroupBox("全域摘要")
+        summary_layout = QVBoxLayout(self.summary_group)
+        summary_layout.setContentsMargins(10, 12, 10, 10)
+        summary_layout.setSpacing(6)
+        summary_layout.addLayout(stats_grid)
         self.summary_label = QLabel("尚未開始建庫。")
         self.summary_label.setWordWrap(True)
         self.summary_label.setStyleSheet("color: #555;")
-        self.log_output = QPlainTextEdit()
-        self.log_output.setReadOnly(True)
-        self.log_output.setMinimumHeight(self._log_output_height_for_lines())
-        self.log_output.setLineWrapMode(QPlainTextEdit.NoWrap)
-        self.log_output.setPlaceholderText("建庫開始後，這裡會顯示即時日誌。")
+        summary_layout.addWidget(self.summary_label)
 
-        log_layout.addWidget(QLabel("完成摘要"))
-        log_layout.addWidget(self.summary_label)
-        log_layout.addWidget(QLabel("日誌輸出"))
-        log_layout.addWidget(self.log_output, 1)
-        self.runtime_splitter = QSplitter(Qt.Vertical)
-        self.runtime_splitter.setChildrenCollapsible(False)
-        self.runtime_splitter.addWidget(progress_group)
-        self.runtime_splitter.addWidget(log_group)
-        self.runtime_splitter.setStretchFactor(0, 4)
-        self.runtime_splitter.setStretchFactor(1, 1)
-        self.runtime_splitter.setSizes(
-            [
-                220,
-                max(self._log_panel_height_for_lines() - 40, 140),
-            ]
-        )
-        runtime_layout.addWidget(self.runtime_splitter, 1)
-        self.runtime_panel.setMinimumHeight(360)
+        details_row = QHBoxLayout()
+        details_row.setSpacing(8)
+        details_row.addWidget(source_panel, 3)
+        details_row.addWidget(self.summary_group, 2)
 
-        self.build_splitter.addWidget(self.build_scroll_area)
+        progress_layout.addWidget(self.progress_bar)
+        progress_layout.addWidget(self.status_label)
+        progress_layout.addLayout(details_row)
+        runtime_layout.addWidget(self.runtime_status_group, 1)
+        self.runtime_panel.setMinimumHeight(280)
+
+        self.build_splitter.addWidget(self.top_splitter)
         self.build_splitter.addWidget(self.runtime_panel)
-        self.build_splitter.setStretchFactor(0, 5)
+        self.build_splitter.setStretchFactor(0, 4)
         self.build_splitter.setStretchFactor(1, 2)
-        self.build_splitter.setSizes([560, 300])
+        self.build_splitter.setSizes([580, 280])
 
         layout.addWidget(self.build_splitter, 1)
 
@@ -981,40 +985,27 @@ class BuilderMainWindow(QMainWindow):
             self.output_dir_edit.setText(serialize_app_relative_path(selected))
             self._refresh_path_views()
 
-    def _log_output_height_for_lines(self, lines: int = 5) -> int:
-        metrics = self.log_output.fontMetrics()
-        document_margin = int(self.log_output.document().documentMargin() * 2)
-        frame = self.log_output.frameWidth() * 2
-        padding = 12
-        return (metrics.lineSpacing() * max(lines, 1)) + document_margin + frame + padding
-
-    def _sync_log_output_height(self, lines: int = 5) -> None:
-        self.log_output.setMinimumHeight(self._log_output_height_for_lines(lines))
-
-    def _log_panel_height_for_lines(self, lines: int = 5) -> int:
-        summary_height = max(self.summary_label.sizeHint().height(), 28)
-        label_height = 48
-        margins = 28
-        return self._log_output_height_for_lines(lines) + summary_height + label_height + margins
-
-    def _apply_compact_runtime_layout(self) -> None:
+    def _apply_initial_workspace_layout(self) -> None:
         if not hasattr(self, "build_splitter"):
             return
 
-        self._sync_log_output_height()
         total_height = self.build_splitter.size().height()
         if total_height <= 0:
             total_height = max(self.height() - 120, 680)
 
-        compact_log_height = self._log_panel_height_for_lines()
-        bottom_height = min(max(compact_log_height, 240), max(int(total_height * 0.38), 240))
-        top_height = max(total_height - bottom_height, bottom_height + 40)
+        bottom_height = min(max(int(total_height * 0.34), 280), 340)
+        top_height = max(total_height - bottom_height, 320)
         self.build_splitter.setSizes([top_height, bottom_height])
 
-        if hasattr(self, "runtime_splitter"):
-            progress_height = 220
-            log_height = max(compact_log_height - 40, 140)
-            self.runtime_splitter.setSizes([progress_height, log_height])
+        if not hasattr(self, "top_splitter"):
+            return
+
+        total_width = self.top_splitter.size().width()
+        if total_width <= 0:
+            total_width = max(self.width() - 80, 980)
+        settings_width = min(max(int(total_width * 0.34), 360), 440)
+        log_width = max(total_width - settings_width, 520)
+        self.top_splitter.setSizes([log_width, settings_width])
 
     def _focus_runtime_panel(self) -> None:
         QApplication.processEvents()
@@ -1023,20 +1014,17 @@ class BuilderMainWindow(QMainWindow):
         if total_height <= 0:
             total_height = max(self.height() - 80, 720)
 
-        minimum_top = 180
-        preferred_bottom = max(int(total_height * 0.6), 360)
-        bottom_height = min(preferred_bottom, max(int(total_height * 0.6), total_height - minimum_top))
+        minimum_top = 240
+        maximum_bottom = max(total_height - minimum_top, 280)
+        preferred_bottom = max(int(total_height * 0.42), 300)
+        bottom_height = min(preferred_bottom, maximum_bottom)
         top_height = max(total_height - bottom_height, minimum_top)
         self.build_splitter.setSizes([top_height, bottom_height])
-        if hasattr(self, "runtime_splitter"):
-            progress_height = 260
-            log_height = max(self._log_panel_height_for_lines(7) - 20, 180)
-            self.runtime_splitter.setSizes([progress_height, log_height])
-        self.log_output.setFocus(Qt.OtherFocusReason)
-        self.log_output.ensureCursorVisible()
+        self.cancel_button.setFocus(Qt.OtherFocusReason)
 
     def _append_log(self, message: str) -> None:
         self.log_output.appendPlainText(message)
+        self.log_output.ensureCursorVisible()
 
     def _save_settings(self) -> None:
         self.settings = self._collect_settings()
@@ -1216,7 +1204,7 @@ class BuilderMainWindow(QMainWindow):
         if self._initial_runtime_layout_applied:
             return
         self._initial_runtime_layout_applied = True
-        QTimer.singleShot(0, self._apply_compact_runtime_layout)
+        QTimer.singleShot(0, self._apply_initial_workspace_layout)
 
     def closeEvent(self, event: Any) -> None:  # noqa: N802
         if self._worker is not None:
