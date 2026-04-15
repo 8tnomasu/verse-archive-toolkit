@@ -59,7 +59,7 @@ class _VerseArchiveTranslatorAppState extends State<VerseArchiveTranslatorApp> {
                   children: [
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('正在準備 VerseArchiveTranslator…'),
+                    Text('Loading VerseArchiveTranslator...'),
                   ],
                 ),
               ),

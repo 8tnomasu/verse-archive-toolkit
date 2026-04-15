@@ -34,44 +34,25 @@ class TranslatorController extends ChangeNotifier {
   String? _infoMessage;
 
   TranslatorAppSettings get settings => _settings;
-
   WorkspaceBookmark? get currentWorkspace => _currentWorkspace;
-
   ResolvedArchiveDirectory? get resolvedDirectory => _resolvedDirectory;
-
   List<LoadWarning> get warnings => _warnings;
-
   List<ArchiveEntry> get visibleEntries => _visibleEntries;
-
   ArchiveEntry? get selectedEntry => _selectedEntry;
-
   EntryTypeFilter get typeFilter => _typeFilter;
-
   TranslationFilter get translationFilter => _translationFilter;
-
   String get searchQuery => _searchQuery;
-
   String get draftTitleCn => _draftTitleCn;
-
   String get draftAuthorCn => _draftAuthorCn;
-
   String get draftContentCn => _draftContentCn;
-
   bool get isBusy => _isBusy;
-
   bool get isSaving => _isSaving;
-
   String? get errorMessage => _errorMessage;
-
   String? get infoMessage => _infoMessage;
-
   bool get hasWorkspace => _currentWorkspace != null;
-
   bool get hasUnsavedChanges =>
       _selectedEntry != null && _computeDirtyState(_selectedEntry!);
-
   bool get canSave => !_isSaving && _selectedEntry != null && hasUnsavedChanges;
-
   ArchiveStats get stats => buildArchiveStats(_documents);
 
   Future<void> initialize() async {
@@ -112,7 +93,7 @@ class TranslatorController extends ChangeNotifier {
         resolvedDirectory: resolved,
       );
       if (success) {
-        _infoMessage = '已載入 ${workspace.displayName}。';
+        _infoMessage = 'Opened workspace: ${workspace.displayName}';
       }
       return success;
     } finally {
@@ -175,7 +156,7 @@ class TranslatorController extends ChangeNotifier {
 
     final success = await openWorkspace(workspace, persist: true);
     if (success) {
-      _infoMessage = '已重新載入目前工作目錄。';
+      _infoMessage = 'Workspace reloaded.';
       notifyListeners();
     }
     return success;
@@ -219,7 +200,7 @@ class TranslatorController extends ChangeNotifier {
       translationFilter: _translationFilter,
     );
     if (candidate == null) {
-      _errorMessage = '目前沒有符合條件的項目可隨機選取。';
+      _errorMessage = 'No entry matches the current random-pick scope.';
       notifyListeners();
       return;
     }
@@ -232,7 +213,7 @@ class TranslatorController extends ChangeNotifier {
       _rebuildVisibleEntries(preserveSelection: candidate);
     }
     selectEntry(candidate);
-    _infoMessage = '已隨機選到一筆資料。';
+    _infoMessage = 'Random entry selected.';
     notifyListeners();
   }
 
@@ -289,7 +270,7 @@ class TranslatorController extends ChangeNotifier {
       _draftTitleCn = result.updatedEntry.titleCn;
       _draftAuthorCn = result.updatedEntry.authorCn;
       _draftContentCn = result.updatedEntry.contentCn;
-      _infoMessage = '譯文已保存。';
+      _infoMessage = 'Changes saved.';
 
       final activeWorkspace = _currentWorkspace;
       if (activeWorkspace != null) {
