@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 
-APP_NAME = "Verse Archive Toolkit"
+APP_NAME = "VerseArchiveToolkit"
 SETTINGS_FILENAME = "settings.json"
 DEFAULT_OUTPUT_DIRNAME = "output"
 DEFAULT_LOG_TAIL_LINES = 200

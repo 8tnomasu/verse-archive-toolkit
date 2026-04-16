@@ -92,7 +92,7 @@ class ArchiveRepository {
     }
 
     throw const RepositoryException(
-      '找不到 VerseArchiveTranslator JSON。請選取包含 archive JSON 的目錄，或選取 portable toolkit 根目錄讓 App 自動進入 output/。',
+      '找不到 VerseArchiveTranslator JSON。請選取包含 archive JSON 的目錄，或選取 portable VerseArchiveToolkit 根目錄讓 App 自動進入 output/。',
     );
   }
 

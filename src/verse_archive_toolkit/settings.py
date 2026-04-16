@@ -7,7 +7,7 @@ from typing import Any, Literal
 from verse_archive_toolkit.app_paths import resolve_output_directory
 
 
-APP_NAME = "Verse Archive Toolkit"
+APP_NAME = "VerseArchiveToolkit"
 SETTINGS_FILENAME = "settings.json"
 SETTINGS_SCHEMA_VERSION = 2
 

@@ -1,6 +1,6 @@
-# VerseArchiveTranslator 行動版相容性說明
+# VerseArchiveTranslator Mobile 相容性說明
 
-本文件描述 Flutter Android 版相對於桌面版 VerseArchiveTranslator 的相容性現況。
+本文件描述 `VerseArchiveToolkit` 內的 `VerseArchiveTranslator Mobile` 相對於 `VerseArchiveTranslator Desktop` 的相容性現況。
 
 ## 完全相容
 
@@ -67,7 +67,7 @@ Android 版目前相容範圍：
 
 - 相對子目錄，例如 `output`
 - `.` 視為目前 tree 根目錄
-- portable toolkit 根目錄下的 `output/`
+- portable `VerseArchiveToolkit` 根目錄下的 `output/`
 
 Android 版目前不直接相容的情況：
 

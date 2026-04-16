@@ -64,7 +64,7 @@ class TranslationWindow(QMainWindow):
         self._dirty = False
         self._selection_guard = False
 
-        self.setWindowTitle("Verse Archive Toolkit 翻譯輔助工具")
+        self.setWindowTitle("VerseArchiveTranslator")
         self.resize(1180, 780)
         self._build_ui()
         self._load_directory(resolve_output_directory(self.settings.translation.data_dir), show_message=False)

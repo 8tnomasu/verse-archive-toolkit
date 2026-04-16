@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "verse-archive-toolkit"
 version = "0.1.0"
-description = "Desktop and CLI tools for building, reviewing, and translating verse archives."
+description = "VerseArchiveToolkit umbrella project for VerseArchiveCurator and VerseArchiveTranslator."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

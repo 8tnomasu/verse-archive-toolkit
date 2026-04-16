@@ -1,4 +1,4 @@
-"""Verse Archive Toolkit package."""
+"""VerseArchiveToolkit umbrella package."""
 
 __all__ = ["__version__"]
 

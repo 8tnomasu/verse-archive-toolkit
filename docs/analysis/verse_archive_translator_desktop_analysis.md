@@ -1,6 +1,6 @@
-# VerseArchiveTranslator 桌面版分析與行動版映射
+# VerseArchiveTranslator Desktop 分析與行動版映射
 
-本文件以目前 repository 內的桌面版實作為唯一主要依據，整理 VerseArchiveTranslator 的既有行為，並說明 Flutter Android 版如何映射。
+本文件以目前 `VerseArchiveToolkit` repository 內的 `VerseArchiveTranslator Desktop` 實作為唯一主要依據，整理 `VerseArchiveTranslator` 的既有行為，並說明 Flutter Android 行動版如何映射。
 
 ## 1. 目前有哪些功能
 

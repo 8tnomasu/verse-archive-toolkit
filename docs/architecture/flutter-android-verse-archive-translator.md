@@ -1,8 +1,8 @@
-# Flutter Android VerseArchiveTranslator Architecture
+# VerseArchiveTranslator Mobile Architecture
 
 ## Goal
 
-The Flutter Android app mirrors the existing desktop `VerseArchiveTranslator` workflow while adapting the interaction model for phone screens and Android file access.
+`VerseArchiveTranslator Mobile` is the Flutter Android edition of `VerseArchiveTranslator` inside the `VerseArchiveToolkit` umbrella project. It mirrors the existing desktop workflow while adapting the interaction model for phone screens and Android file access.
 
 The architecture stays split into four layers:
 

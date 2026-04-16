@@ -18,47 +18,51 @@ from verse_archive_toolkit.settings_store import SettingsStore
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="verse-archive",
-        description="建立詩作與哲思語錄資料庫、啟動桌面工具，並檢視目前輸出統計。",
+        description="VerseArchiveToolkit CLI，用於操作 VerseArchiveCurator 建庫流程與共用路徑診斷。",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    build_parser = subparsers.add_parser("build", help="抓取來源資料並執行建庫。")
+    build_parser = subparsers.add_parser("build", help="執行 VerseArchiveCurator 的 archive 建庫流程。")
     build_parser.add_argument(
         "--source",
         choices=("all", "poems", "quotes"),
         default=None,
-        help="建庫來源：all=並行抓取英文詩與哲思語錄、poems=只抓英文詩、quotes=只抓哲思語錄",
+        help="建庫來源：all=英文詩與哲思語錄，poems=只抓英文詩，quotes=只抓哲思語錄。",
     )
-    build_parser.add_argument("--output-dir", type=Path, default=None, help="輸出資料夾路徑")
-    build_parser.add_argument("--poem-target", type=int, default=None, help="英文詩目標數量")
-    build_parser.add_argument("--quote-target", type=int, default=None, help="哲思語錄目標數量")
+    build_parser.add_argument("--output-dir", type=Path, default=None, help="指定 archive JSON 輸出目錄。")
+    build_parser.add_argument("--poem-target", type=int, default=None, help="英文詩目標筆數。")
+    build_parser.add_argument("--quote-target", type=int, default=None, help="哲思語錄目標筆數。")
     build_parser.add_argument(
-        "--poetry-batch-size", type=int, default=None, help="每批抓取 PoetryDB 的筆數"
+        "--poetry-batch-size",
+        type=int,
+        default=None,
+        help="每批向 PoetryDB 抓取的筆數。",
     )
     build_parser.add_argument(
         "--zenquotes-api-key",
         type=str,
         default="",
-        help="ZenQuotes API 金鑰；若未提供會改用本機設定或環境變數",
+        help="ZenQuotes API key；若未提供，會優先使用本機設定或環境設定。",
     )
     build_parser.add_argument(
-        "--zenquotes-interval", type=float, default=None, help="ZenQuotes 請求間隔（秒）"
+        "--zenquotes-interval",
+        type=float,
+        default=None,
+        help="ZenQuotes 請求間隔秒數。",
     )
-    build_parser.add_argument("--save-every", type=int, default=None, help="每幾筆自動儲存一次")
-    build_parser.add_argument(
-        "--request-timeout", type=int, default=None, help="HTTP 請求逾時秒數"
-    )
-    build_parser.add_argument("--max-retries", type=int, default=None, help="HTTP 最大重試次數")
+    build_parser.add_argument("--save-every", type=int, default=None, help="每處理幾筆資料就寫回一次。")
+    build_parser.add_argument("--request-timeout", type=int, default=None, help="HTTP timeout 秒數。")
+    build_parser.add_argument("--max-retries", type=int, default=None, help="HTTP 最大重試次數。")
 
-    stats_parser = subparsers.add_parser("stats", help="檢視目前輸出資料夾中的統計。")
-    stats_parser.add_argument("--output-dir", type=Path, default=None, help="要檢查的輸出資料夾")
+    stats_parser = subparsers.add_parser("stats", help="輸出目前 archive JSON 的統計資訊。")
+    stats_parser.add_argument("--output-dir", type=Path, default=None, help="改用指定輸出目錄讀取統計。")
 
-    subparsers.add_parser("gui", help="啟動主程式建庫 GUI。")
-    subparsers.add_parser("translator", help="啟動翻譯輔助 GUI。")
-    subparsers.add_parser("settings-path", help="輸出本機設定檔路徑。")
-    subparsers.add_parser("logs-path", help="輸出本機日誌資料夾路徑。")
-    paths_parser = subparsers.add_parser("paths", help="輸出目前設定檔、日誌與輸出資料夾位置。")
-    paths_parser.add_argument("--output-dir", type=Path, default=None, help="覆寫要顯示的輸出資料夾")
+    subparsers.add_parser("gui", help="啟動 VerseArchiveCurator 桌面 GUI。")
+    subparsers.add_parser("translator", help="啟動 VerseArchiveTranslator Desktop GUI。")
+    subparsers.add_parser("settings-path", help="輸出本機 settings.json 路徑。")
+    subparsers.add_parser("logs-path", help="輸出桌面應用程式 log 資料夾路徑。")
+    paths_parser = subparsers.add_parser("paths", help="一次輸出 settings、logs、output 等診斷路徑。")
+    paths_parser.add_argument("--output-dir", type=Path, default=None, help="指定要解析的 output 目錄。")
 
     return parser
 
@@ -101,7 +105,11 @@ def _apply_build_overrides(settings: AppSettings, args: argparse.Namespace) -> A
     return updated
 
 
-def _collect_path_payload(store: SettingsStore, settings: AppSettings, output_dir: Path | None = None) -> dict[str, str]:
+def _collect_path_payload(
+    store: SettingsStore,
+    settings: AppSettings,
+    output_dir: Path | None = None,
+) -> dict[str, str]:
     resolved_output = resolve_output_directory(
         output_dir if output_dir is not None else settings.build.output_dir
     )
@@ -157,7 +165,11 @@ def main(argv: list[str] | None = None) -> int:
         output_dir = resolve_output_directory(
             args.output_dir if args.output_dir is not None else settings.build.output_dir
         )
-        runtime_config = build_runtime_config(settings.build, settings.filters, settings.zenquotes_api_key)
+        runtime_config = build_runtime_config(
+            settings.build,
+            settings.filters,
+            settings.zenquotes_api_key,
+        )
         runtime_config.output_dir = output_dir
         print(json.dumps(collect_output_stats(runtime_config), indent=2))
         return 0
@@ -171,7 +183,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "paths":
-        print(json.dumps(_collect_path_payload(store, settings, args.output_dir), indent=2, ensure_ascii=False))
+        print(
+            json.dumps(
+                _collect_path_payload(store, settings, args.output_dir),
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
         return 0
 
     if args.command == "gui":
@@ -184,5 +202,5 @@ def main(argv: list[str] | None = None) -> int:
 
         return translator_main()
 
-    parser.error(f"不支援的指令：{args.command}")
+    parser.error(f"未知命令：{args.command}")
     return 2

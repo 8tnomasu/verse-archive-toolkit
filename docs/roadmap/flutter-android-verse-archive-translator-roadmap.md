@@ -1,4 +1,4 @@
-# Flutter Android VerseArchiveTranslator Roadmap
+# VerseArchiveTranslator Mobile Roadmap
 
 ## 已完成的第一階段
 
@@ -43,4 +43,4 @@
 - 帳號系統
 - 雲端同步平台
 - 背景翻譯排程
-- 與 VerseArchiveTranslator 無關的其他 toolkit 模組
+- 與 VerseArchiveTranslator 無關的其他 VerseArchiveToolkit 模組

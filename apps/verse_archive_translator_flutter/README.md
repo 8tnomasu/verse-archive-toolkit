@@ -1,6 +1,6 @@
-# VerseArchiveTranslator Flutter Android App
+# VerseArchiveTranslator Mobile
 
-This Flutter app keeps the desktop `VerseArchiveTranslator` workflow focused on manual translation and manual revision. It works directly on locally synced files, especially folders synced to Android through Syncthing.
+This Flutter Android app is the mobile edition of `VerseArchiveTranslator` inside the `VerseArchiveToolkit` umbrella project. It keeps the desktop `VerseArchiveTranslator` workflow focused on manual translation and manual revision, and works directly on locally synced files, especially folders synced to Android through Syncthing.
 
 ## Scope
 

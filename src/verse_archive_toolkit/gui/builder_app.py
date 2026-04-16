@@ -412,7 +412,7 @@ class BuilderMainWindow(QMainWindow):
         self._translator_window: QWidget | None = None
         self._initial_runtime_layout_applied = False
 
-        self.setWindowTitle("Verse Archive Toolkit 建庫工具")
+        self.setWindowTitle("VerseArchiveCurator")
         self.resize(1100, 860)
         self._build_ui()
         self._apply_settings(self.settings)
@@ -425,7 +425,7 @@ class BuilderMainWindow(QMainWindow):
         central = QWidget()
         main_layout = QVBoxLayout(central)
 
-        header = QLabel("Verse Archive Toolkit 建庫工具")
+        header = QLabel("VerseArchiveCurator")
         header.setStyleSheet("font-size: 20px; font-weight: 600;")
         main_layout.addWidget(header)
 
@@ -610,7 +610,7 @@ class BuilderMainWindow(QMainWindow):
         self.cancel_button.setEnabled(False)
         self.copy_recent_log_button = QPushButton("複製最近日誌內容")
         self.copy_recent_log_button.clicked.connect(self._copy_recent_log_content)
-        self.open_translator_button = QPushButton("開啟翻譯工具")
+        self.open_translator_button = QPushButton("開啟 VerseArchiveTranslator")
         self.open_translator_button.clicked.connect(self._open_translator_window)
 
         action_row.addWidget(self.save_settings_button)
@@ -859,7 +859,7 @@ class BuilderMainWindow(QMainWindow):
             latest_log = find_latest_log_path("builder-gui")
             if latest_log is None:
                 self.status_label.setText("目前沒有可複製的日誌。")
-                QMessageBox.information(self, "尚未找到日誌", "目前沒有可複製的主程式建庫工具日誌。")
+                QMessageBox.information(self, "尚未找到日誌", "目前沒有可複製的 VerseArchiveCurator 日誌。")
                 return
             try:
                 clipboard_text = read_log_tail(latest_log, max_lines=DEFAULT_LOG_TAIL_LINES)
@@ -899,7 +899,7 @@ class BuilderMainWindow(QMainWindow):
     def _open_latest_log_location(self) -> None:
         latest_log = find_latest_log_path("builder-gui")
         if latest_log is None:
-            QMessageBox.information(self, "尚未找到日誌", "目前尚未找到主程式建庫工具的啟動日誌。")
+            QMessageBox.information(self, "尚未找到日誌", "目前尚未找到 VerseArchiveCurator 的啟動日誌。")
             return
         self._open_directory(latest_log)
 

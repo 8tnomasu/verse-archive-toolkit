@@ -75,7 +75,7 @@ function Invoke-GuiBuild {
 }
 
 if ($Target -in @("All", "Builder")) {
-    $builderName = if ($Mode -eq "Debug") { "VerseArchiveToolkitDebug" } else { "VerseArchiveToolkit" }
+    $builderName = if ($Mode -eq "Debug") { "VerseArchiveCuratorDebug" } else { "VerseArchiveCurator" }
     Invoke-GuiBuild -Name $builderName -EntryScript (Join-Path $srcDir "verse_archive_toolkit\builder_gui_entry.py")
 }
 

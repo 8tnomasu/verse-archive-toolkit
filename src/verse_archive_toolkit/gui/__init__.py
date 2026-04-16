@@ -1,1 +1,1 @@
-"""Desktop GUI entry points for Verse Archive Toolkit."""
+"""Desktop GUI entry points for VerseArchiveToolkit."""

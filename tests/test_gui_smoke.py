@@ -37,7 +37,7 @@ class GuiSmokeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             window = BuilderMainWindow(SettingsStore(Path(tmp_dir)))
-            self.assertEqual(window.windowTitle(), "Verse Archive Toolkit 建庫工具")
+            self.assertEqual(window.windowTitle(), "VerseArchiveCurator")
             window.close()
 
     def test_translation_window_starts(self) -> None:
@@ -51,7 +51,7 @@ class GuiSmokeTests(unittest.TestCase):
             settings.translation.data_dir = str(output_dir)
             store.save(settings)
             window = TranslationWindow(store)
-            self.assertEqual(window.windowTitle(), "Verse Archive Toolkit 翻譯輔助工具")
+            self.assertEqual(window.windowTitle(), "VerseArchiveTranslator")
             window.close()
 
     def test_filter_action_rule_round_trip_uses_combo_data(self) -> None:
@@ -149,7 +149,7 @@ class GuiSmokeTests(unittest.TestCase):
                 self.app.processEvents()
 
                 self.assertIsNotNone(window._translator_window)
-                self.assertEqual(window._translator_window.windowTitle(), "Verse Archive Toolkit 翻譯輔助工具")
+                self.assertEqual(window._translator_window.windowTitle(), "VerseArchiveTranslator")
 
                 window._translator_window.close()
                 window.close()
