@@ -1,38 +1,36 @@
 # VerseArchiveToolkit
 
-VerseArchiveToolkit is the umbrella project for building and translating verse archive JSON files.
+`VerseArchiveToolkit` 是整個工具集合與 repository 名稱，用於建立、整理、維護與人工翻譯 verse archive JSON。
 
-VerseArchiveToolkit 是整個工具集合與 repository 名稱，用於建立、整理、維護與人工翻譯 verse archive JSON。
+## 專案包含的產品
 
-## Products
+- `VerseArchiveCurator`：桌面端建庫與 archive 維護工具。
+- `VerseArchiveTranslator Desktop`：桌面端人工翻譯與編修工具。
+- `VerseArchiveTranslator Mobile`：Flutter Android 人工翻譯與編修工具。
 
-- `VerseArchiveCurator`: the desktop archive-building and archive-maintenance tool.
-- `VerseArchiveTranslator Desktop`: the desktop manual translation and revision tool.
-- `VerseArchiveTranslator Mobile`: the Flutter Android manual translation and revision tool.
+## 命名原則
 
-## Naming policy
+- `VerseArchiveToolkit` 只指整個 repository、umbrella project 與工具集合。
+- `VerseArchiveCurator` 是桌面端建庫工具的正式產品名稱。
+- `VerseArchiveTranslator` 是翻譯工具的統一產品名稱，桌面版與 Flutter Android 版共用此名稱。
+- `verse-archive-toolkit`、`verse_archive_toolkit` 與既有 CLI 指令名稱為相容性保留，不因產品命名調整而變更。
 
-- `VerseArchiveToolkit` only refers to the repository, umbrella project, and tool suite.
-- `VerseArchiveCurator` is the formal product name of the desktop archive-building tool.
-- `VerseArchiveTranslator` remains the shared product name for both the desktop translator and the Flutter Android translator.
-- Technical identifiers such as `verse-archive-toolkit`, `verse_archive_toolkit`, and the existing CLI command names are retained for compatibility.
+## 從 Windows Release ZIP 開始使用
 
-## Quick start from a Windows release ZIP
+1. 到 GitHub Releases 下載最新的 Windows ZIP。
+2. 將 ZIP 解壓縮到本機資料夾。
+3. 執行 `VerseArchiveCurator.exe` 來建立或維護 archive JSON。
+4. 如果需要抓取哲思語錄，先填入 `ZenQuotes API key`。
+5. 選擇輸出資料夾與建庫選項後開始建庫。
+6. 建庫完成後，可從 Curator 內開啟 `VerseArchiveTranslator.exe`，或直接執行它來進行人工翻譯與編修。
 
-1. Download the latest Windows ZIP from GitHub Releases.
-2. Extract the ZIP to a local folder.
-3. Run `VerseArchiveCurator.exe` to build or maintain archive JSON files.
-4. If you need quote collection, fill in your `ZenQuotes API key`.
-5. Choose the output folder and build options, then start the build.
-6. After the build finishes, open `VerseArchiveTranslator.exe` from Curator or launch it directly for manual translation and revision.
+## 各程式用途
 
-## What each app does
+- `VerseArchiveCurator` 會從 PoetryDB 與 ZenQuotes 抓取資料，套用 review / reject 過濾規則，並輸出 archive JSON。
+- `VerseArchiveTranslator Desktop` 可搜尋、檢視、審閱並人工編輯 `title.cn`、`author.cn` 與 `content.cn`。
+- `VerseArchiveTranslator Mobile` 在 Android 上延續相同的人工翻譯流程，並支援本機同步資料夾工作模式。
 
-- `VerseArchiveCurator` fetches data from PoetryDB and ZenQuotes, applies review / reject filter rules, and writes archive JSON files.
-- `VerseArchiveTranslator Desktop` lets you search, review, and manually edit `title.cn`, `author.cn`, and `content.cn`.
-- `VerseArchiveTranslator Mobile` keeps the same manual translation workflow on Android through Flutter and local synced folders.
-
-## Python development
+## Python 開發安裝
 
 ```bash
 python -m venv .venv
@@ -41,21 +39,21 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-Optional packaging dependencies:
+如果需要安裝打包相關依賴：
 
 ```bash
 python -m pip install -e .[packaging]
 ```
 
-## Entrypoints
+## 啟動入口
 
-- `verse-archive-gui`: launches `VerseArchiveCurator`.
-- `verse-archive-translator`: launches `VerseArchiveTranslator Desktop`.
-- `verse-archive`: CLI entry for build, stats, and path diagnostics.
+- `verse-archive-gui`：啟動 `VerseArchiveCurator`。
+- `verse-archive-translator`：啟動 `VerseArchiveTranslator Desktop`。
+- `verse-archive`：CLI 入口，用於建庫、統計與路徑診斷。
 
-## Portable layout
+## Portable 目錄結構
 
-All runtime data is stored next to the portable app folder:
+所有執行期資料都會存放在 portable 應用程式資料夾旁：
 
 ```text
 app-root/
@@ -69,32 +67,32 @@ app-root/
     philosophy_quotes.json
 ```
 
-- `data/` stores local settings only.
-- `logs/` stores runtime logs for the desktop apps.
-- `output/` stores the generated archive JSON files.
+- `data/`：只存放本機設定。
+- `logs/`：存放桌面應用程式的執行日誌。
+- `output/`：存放產生出的 archive JSON。
 
-The Flutter Android app can work with either the archive `output/` folder directly or a portable VerseArchiveToolkit root that contains `output/`.
+Flutter Android App 可以直接使用 archive `output/` 資料夾，也可以使用包含 `output/` 的 portable `VerseArchiveToolkit` 根目錄。
 
-## CLI notes
+## CLI 與技術名稱說明
 
-The CLI and Python package still keep compatibility-oriented technical names:
+CLI 與 Python package 仍保留相容性導向的技術名稱：
 
-- package name: `verse-archive-toolkit`
-- import path: `verse_archive_toolkit`
-- CLI command: `verse-archive`
-- GUI command: `verse-archive-gui`
+- package 名稱：`verse-archive-toolkit`
+- import path：`verse_archive_toolkit`
+- CLI 指令：`verse-archive`
+- GUI 指令：`verse-archive-gui`
 
-These names are kept to avoid breaking existing development and automation workflows.
+這些名稱會保留，以避免破壞既有的開發流程、安裝腳本與自動化設定。
 
-## Validation
+## 驗證
 
-Desktop / Python:
+桌面 / Python 驗證：
 
 ```bash
 python -m pytest
 ```
 
-Flutter Android, run inside `apps/verse_archive_translator_flutter`:
+Flutter Android 驗證，請在 `apps/verse_archive_translator_flutter` 目錄下執行：
 
 ```bash
 flutter pub get
@@ -103,38 +101,38 @@ flutter test
 flutter build apk --debug
 ```
 
-## Packaging
+## 打包
 
-Build the Windows desktop apps:
+建立 Windows Release 版桌面應用程式：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\packaging\build-windows-release.ps1
 ```
 
-Debug build:
+建立 Debug 版：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\packaging\build-windows-debug.ps1
 ```
 
-Release packaging keeps these product names:
+Release 打包輸出的產品名稱為：
 
 - `VerseArchiveCurator`
 - `VerseArchiveTranslator`
 
-## Flutter Android app
+## Flutter Android App
 
-The Android translator lives in `apps/verse_archive_translator_flutter/` and is the mobile edition of `VerseArchiveTranslator`.
+Android 版翻譯器位於 `apps/verse_archive_translator_flutter/`，是 `VerseArchiveTranslator` 的行動版。
 
-Related docs:
+相關文件：
 
-- App README: `apps/verse_archive_translator_flutter/README.md`
-- Desktop translator analysis: `docs/analysis/verse_archive_translator_desktop_analysis.md`
-- Architecture: `docs/architecture/flutter-android-verse-archive-translator.md`
-- Compatibility: `docs/compatibility/verse-archive-translator-mobile-compatibility.md`
-- Roadmap: `docs/roadmap/flutter-android-verse-archive-translator-roadmap.md`
+- App README：`apps/verse_archive_translator_flutter/README.md`
+- 桌面翻譯器分析：`docs/analysis/verse_archive_translator_desktop_analysis.md`
+- 架構說明：`docs/architecture/flutter-android-verse-archive-translator.md`
+- 相容性說明：`docs/compatibility/verse-archive-translator-mobile-compatibility.md`
+- Roadmap：`docs/roadmap/flutter-android-verse-archive-translator-roadmap.md`
 
-## Notes
+## 備註
 
-- Keep your `ZenQuotes API key` local and do not commit it.
-- This naming pass does not change JSON schema, archive read/write semantics, translator save semantics, search semantics, or random-pick semantics.
+- `ZenQuotes API key` 請只保留在本機，不要提交到版本庫。
+- 本次命名整理不會變更 JSON schema、archive 讀寫語意、translator 保存語意、搜尋語意或 random-pick 語意。
