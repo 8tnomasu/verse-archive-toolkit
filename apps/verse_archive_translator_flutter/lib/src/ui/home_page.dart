@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../controllers/translator_controller.dart';
 import '../models/archive_models.dart';
+import 'copy_text_builder.dart';
 
 const Map<String, String> _typeLabels = <String, String>{
   'english_poem': '英文詩',
@@ -318,6 +320,54 @@ class _TranslatorHomePageState extends State<TranslatorHomePage> {
 
   Future<void> _saveCurrentEntry() async {
     await widget.controller.saveCurrentEntry();
+  }
+
+  Future<void> _copySourceCard(ArchiveEntry entry) async {
+    await _copyCardText(
+      text: buildSourceCardCopyText(entry),
+      successMessage: '已複製原文',
+    );
+  }
+
+  Future<void> _copyTranslationCard(ArchiveEntry entry) async {
+    await _copyCardText(
+      text: buildTranslationCardCopyText(entry),
+      successMessage: '已複製譯文',
+    );
+  }
+
+  Future<void> _copyCardText({
+    required String? text,
+    required String successMessage,
+  }) async {
+    if (!mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+
+    if (text == null || text.trim().isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('沒有可複製的內容'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) {
+      return;
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(successMessage),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<bool> _confirmDiscardChanges() async {
@@ -902,6 +952,8 @@ class _TranslatorHomePageState extends State<TranslatorHomePage> {
                     children: [
                       _SectionCard(
                         title: '原文',
+                        hintText: '長按複製',
+                        onLongPress: () => _copySourceCard(entry),
                         child: Column(
                           children: [
                             _ReadonlyField(
@@ -925,6 +977,8 @@ class _TranslatorHomePageState extends State<TranslatorHomePage> {
                       const SizedBox(height: 12),
                       _SectionCard(
                         title: '譯文',
+                        hintText: '長按複製',
+                        onLongPress: () => _copyTranslationCard(entry),
                         child: Column(
                           children: [
                             _EditorField(
@@ -1125,27 +1179,59 @@ class _TinyBadge extends StatelessWidget {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.child});
+  const _SectionCard({
+    required this.title,
+    required this.child,
+    this.hintText,
+    this.onLongPress,
+  });
 
   final String title;
   final Widget child;
+  final String? hintText;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          child,
-        ],
+    return Material(
+      color: Colors.transparent,
+      child: Ink(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onLongPress: onLongPress,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    if (hintText != null)
+                      Text(
+                        hintText!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                child,
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

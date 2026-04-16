@@ -46,6 +46,7 @@ The editor focuses on the translation workflow:
 - Compact record header
 - Source section
 - Translation section
+- Long press on the source or translation card copies that section as plain text
 - Optional expandable metadata section
 - Low-height sync / save bar
 
